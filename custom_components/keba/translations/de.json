@@ -1,0 +1,33 @@
+{
+  "title": "Keba Ladestation",
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "host": "Host (IP Adresse)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zur Ladestation nicht möglich.",
+      "unknown": "Unbekannter Fehler. Bitte überprüfe die Log Datei."
+    },
+    "abort": {
+      "already_configured": "Ladestation bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "wallbox_options": {
+        "data": {
+          "failsafe": "Failsafe mode",
+          "failsafe_timeout": "Failsafe timeout (in Sekunden)",
+          "failsafe_fallback": "Failsafe fallback current (in Ampere)",
+          "failsafe_persist": "Failsafe persistieren",
+          "rfid": "RFID tag für default Authentication (Optional)",
+          "rfid_class": "RFID class für default Authentication (Farbcode, optional)"
+        }
+      }
+    }
+  }
+}
