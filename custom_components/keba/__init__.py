@@ -41,19 +41,6 @@ PLATFORMS = [
     Platform.NUMBER,
 ]
 
-SERVICES = [
-    "request_data",
-    "set_energy",
-    "set_current",
-    "start",
-    "stop",
-    "enable",
-    "disable",
-    "set_failsafe",
-    "unlock_socket",
-    "set_charging_power",
-]
-
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the BMW Connected Drive component from configuration.yaml."""
@@ -132,26 +119,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         await function_call(**call.data, **additional_args)
 
-    for service in SERVICES:
-        hass.services.async_register(DOMAIN, service, execute_service)
+    for service in wallbox.device_info.available_services():
+        if service == "dispaly":
+            # set up notify platform, no entry support for notify platform yet,
+            # have to use discovery to load platform.
+            hass.async_create_task(
+                discovery.async_load_platform(
+                    hass,
+                    NOTIFY_DOMAIN,
+                    DOMAIN,
+                    {CONF_NAME: DOMAIN},
+                    hass.data[DOMAIN][DATA_HASS_CONFIG],
+                )
+            )
+        else:
+            hass.services.async_register(DOMAIN, service, execute_service)
 
     # Load platforms
     hass.config_entries.async_setup_platforms(
         entry, [platform for platform in PLATFORMS if platform != Platform.NOTIFY]
     )
 
-    # set up notify platform, no entry support for notify platform yet,
-    # have to use discovery to load platform.
-    if wallbox.device_info.display_support:
-        hass.async_create_task(
-            discovery.async_load_platform(
-                hass,
-                NOTIFY_DOMAIN,
-                DOMAIN,
-                {CONF_NAME: DOMAIN},
-                hass.data[DOMAIN][DATA_HASS_CONFIG],
-            )
-        )
     return True
 
 
@@ -165,7 +153,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Remove notify
     wallbox = keba.get_wallbox(entry.data["host"])
-    if wallbox.device_info.display_support:
+    if "display" in wallbox.device_info.available_services():
         hass.services.async_remove(
             NOTIFY_DOMAIN, f"{DOMAIN}_{slugify(wallbox.device_info.model)}"
         )
@@ -174,12 +162,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if len(hass.data[DOMAIN][WALLBOXES]) == 1:
         _LOGGER.debug("Removing last charging station, cleanup services and notify")
 
-        # Unload last notify
-        if wallbox.device_info.display_support:
-            hass.services.async_remove(NOTIFY_DOMAIN, DOMAIN)
-
-        for service in SERVICES:
-            hass.services.async_remove(DOMAIN, service)
+        for service in wallbox.device_info.available_services():
+            if service == "dispaly":
+                hass.services.async_remove(NOTIFY_DOMAIN, DOMAIN)
+            else:
+                hass.services.async_remove(DOMAIN, service)
 
     if unload_ok:
         keba.remove_wallbox(entry.data["host"])
