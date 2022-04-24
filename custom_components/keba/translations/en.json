@@ -1,16 +1,17 @@
 {
-  "title": "Keba Charging Station",
   "config": {
     "step": {
       "user": {
         "data": {
+          "description": "Connect to your charging station, if the IP address is not set, auto-discovery is used",
           "host": "Host (IP Address)"
         }
       }
     },
     "error": {
       "cannot_connect": "Could not connect to the charging station.",
-      "unknown": "Unkown error occured. Please check the logs."
+      "unknown": "Unkown error occured. Please check the logs.",
+      "no_device_found": "No device was found in your network."
     },
     "abort": {
       "already_configured": "Charging station already configured."

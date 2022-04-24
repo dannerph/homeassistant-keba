@@ -13,6 +13,7 @@ from homeassistant.helpers.entity import EntityCategory
 
 from . import KebaBaseEntity
 from .const import DOMAIN, KEBA_CONNECTION
+from homeassistant.const import CONF_HOST
 
 from keba_kecontact.connection import KebaKeContact
 from keba_kecontact.wallbox import Wallbox
@@ -68,14 +69,14 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the BMW ConnectedDrive sensors from config entry."""
+    """Set up the keba charging station binary sensors from config entry."""
     keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
     entities: list[KebaBinarySensor] = []
 
-    for wallbox in keba.get_wallboxes():
-        entities.extend(
-            [KebaBinarySensor(wallbox, description) for description in SENSOR_TYPES]
-        )
+    wallbox = keba.get_wallbox(config_entry.data[CONF_HOST])
+    entities.extend(
+        [KebaBinarySensor(wallbox, description) for description in SENSOR_TYPES]
+    )
     async_add_entities(entities, True)
 
 

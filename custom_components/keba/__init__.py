@@ -9,7 +9,7 @@ from homeassistant.helpers import device_registry, discovery
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.entity import DeviceInfo, Entity, EntityDescription
 from homeassistant.util import slugify
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, SOURCE_IMPORT
 from homeassistant.const import CONF_NAME, Platform, CONF_DEVICE_ID
 
 from homeassistant.components.notify import DOMAIN as NOTIFY_DOMAIN
@@ -36,6 +36,7 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [
     Platform.BINARY_SENSOR,
     Platform.LOCK,
+    Platform.BUTTON,
     Platform.NOTIFY,
     Platform.SENSOR,
     Platform.NUMBER,
@@ -43,23 +44,22 @@ PLATFORMS = [
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the BMW Connected Drive component from configuration.yaml."""
+    """Set up the KEBA charging station component from configuration.yaml."""
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][DATA_HASS_CONFIG] = config
 
-    # if DOMAIN in config:
-    #     for entry_config in config[DOMAIN].values():
-    #         hass.async_create_task(
-    #             hass.config_entries.flow.async_init(
-    #                 DOMAIN, context={"source": SOURCE_IMPORT}, data=entry_config
-    #             )
-    #         )
+    if DOMAIN in config:
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN, context={"source": SOURCE_IMPORT}, data=config[DOMAIN]
+            )
+        )
 
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up BMW Connected Drive from a config entry."""
+    """Set up KEBA charging station from a config entry."""
     keba = await setup_keba_connection(hass)
     try:
         wallbox = await keba.setup_wallbox(entry.data["host"])
@@ -120,7 +120,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await function_call(**call.data, **additional_args)
 
     for service in wallbox.device_info.available_services():
-        if service == "dispaly":
+        if service == "display":
             # set up notify platform, no entry support for notify platform yet,
             # have to use discovery to load platform.
             hass.async_create_task(
@@ -187,11 +187,6 @@ async def setup_keba_connection(hass: HomeAssistant) -> bool:
 
     if KEBA_CONNECTION not in hass.data[DOMAIN]:
         hass.data[DOMAIN][KEBA_CONNECTION] = KebaKeContact(hass.loop)
-        _LOGGER.debug(
-            "First time setup, add keba connection (UDP listener) instance to data"
-        )
-    else:
-        _LOGGER.debug("Keba connection (UDP listener) already created")
 
     return hass.data[DOMAIN][KEBA_CONNECTION]
 
@@ -214,11 +209,11 @@ class KebaBaseEntity(Entity):
 
         self._attr_name = f"{wb_info.manufacturer} {wb_info.model} {description.name}"
         self._attr_unique_id = (
-            f"keba-charging-station-{wb_info.device_id}-{description.key}"
+            f"{DOMAIN}-{wb_info.device_id}-{description.key}"
         )
 
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, wb_info.host)},
+            identifiers={(DOMAIN, wb_info.device_id)},
             manufacturer=wb_info.manufacturer,
             model=wb_info.model,
             name=f"{wb_info.manufacturer} {wb_info.model}",

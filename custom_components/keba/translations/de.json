@@ -1,16 +1,17 @@
 {
-  "title": "Keba Ladestation",
   "config": {
     "step": {
       "user": {
         "data": {
+          "description": "Verbinde dich mit deiner Ladestation, wenn die IP-Adresse nicht eingestellt ist, wird die automatische Erkennung verwendet",
           "host": "Host (IP Adresse)"
         }
       }
     },
     "error": {
       "cannot_connect": "Verbindung zur Ladestation nicht möglich.",
-      "unknown": "Unbekannter Fehler. Bitte überprüfe die Log Datei."
+      "unknown": "Unbekannter Fehler. Bitte überprüfe die Log Datei.",
+      "no_device_found": "Keine Ladestation im Netzwerk gefunden."
     },
     "abort": {
       "already_configured": "Ladestation bereits konfiguriert."

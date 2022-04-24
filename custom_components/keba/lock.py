@@ -8,6 +8,7 @@ from homeassistant.components.lock import LockEntityDescription, LockEntity
 
 from . import KebaBaseEntity
 from .const import CONF_RFID, CONF_RFID_CLASS, DOMAIN, KEBA_CONNECTION
+from homeassistant.const import CONF_HOST
 
 from keba_kecontact.connection import KebaKeContact
 from keba_kecontact.wallbox import Wallbox
@@ -18,21 +19,21 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the BMW ConnectedDrive sensors from config entry."""
+    """Set up the keba charging station locks from config entry."""
     keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
     entities: list[KebaLock] = []
 
-    for wallbox in keba.get_wallboxes():
-        lock_description = LockEntityDescription(key="Authreq", name="Authentication")
+    wallbox = keba.get_wallbox(entry.data[CONF_HOST])
+    lock_description = LockEntityDescription(key="Authreq", name="Authentication")
 
-        additional_args = {}
-        if CONF_RFID in entry.options and entry.options[CONF_RFID] != "":
-            additional_args[CONF_RFID] = entry.options[CONF_RFID]
-        if CONF_RFID_CLASS in entry.options and entry.options[CONF_RFID_CLASS] != "":
-            additional_args[CONF_RFID_CLASS] = entry.options[CONF_RFID_CLASS]
+    additional_args = {}
+    if CONF_RFID in entry.options and entry.options[CONF_RFID] != "":
+        additional_args[CONF_RFID] = entry.options[CONF_RFID]
+    if CONF_RFID_CLASS in entry.options and entry.options[CONF_RFID_CLASS] != "":
+        additional_args[CONF_RFID_CLASS] = entry.options[CONF_RFID_CLASS]
 
-        lock = KebaLock(wallbox, lock_description, additional_args)
-        entities.append(lock)
+    lock = KebaLock(wallbox, lock_description, additional_args)
+    entities.append(lock)
     async_add_entities(entities, True)
 
 

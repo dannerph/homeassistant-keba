@@ -1,18 +1,5 @@
 # Describes the format for available services for KEBA charging staitons
 
-request_data:
-  name: Request data
-  description: >
-    Request new data from the charging station.
-  fields:
-    device_id:
-      name: Wallbox
-      description: The Keba Wallbox
-      required: true
-      selector:
-        device:
-          integration: keba
-
 start:
   name: Authorize charging process
   description: >
@@ -110,32 +97,6 @@ set_current:
           max: 860400
           step: 1
           unit_of_measurement: seconds
-
-enable:
-  name: Enable
-  description: >
-    Starts a charging process if charging station is authorized.
-  fields:
-    device_id:
-      name: Wallbox
-      description: The Keba Wallbox
-      required: true
-      selector:
-        device:
-          integration: keba
-
-disable:
-  name: Disable
-  description: >
-    Stops the charging process if charging station is authorized.
-  fields:
-    device_id:
-      name: Wallbox
-      description: The Keba Wallbox
-      required: true
-      selector:
-        device:
-          integration: keba
 
 set_failsafe:
   name: Set failsafe

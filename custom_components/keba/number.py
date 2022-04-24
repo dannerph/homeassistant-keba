@@ -1,13 +1,11 @@
-"""Number entities for musiccast."""
-
-from aiomusiccast.capabilities import NumberSetter
+"""Number entities for keba."""
 
 from homeassistant.components.number import NumberEntity, NumberEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from homeassistant.const import ELECTRIC_CURRENT_AMPERE
+from homeassistant.const import ELECTRIC_CURRENT_AMPERE, CONF_HOST
 
 from . import KebaBaseEntity
 from .const import DOMAIN, KEBA_CONNECTION
@@ -21,24 +19,22 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the BMW ConnectedDrive sensors from config entry."""
+    """Set up the Keba charging station number from config entry."""
     keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
     entities: list[KebaNumber] = []
 
-    for wallbox in keba.get_wallboxes():
-        number_description = NumberEntityDescription(
-            key="Curr user",
-            name="Charging current",
-            unit_of_measurement=ELECTRIC_CURRENT_AMPERE,
-        )
-        entities.extend([KebaNumber(wallbox, number_description)])
+    wallbox = keba.get_wallbox(config_entry.data[CONF_HOST])
+    number_description = NumberEntityDescription(
+        key="Curr user",
+        name="Charging current",
+        unit_of_measurement=ELECTRIC_CURRENT_AMPERE,
+    )
+    entities.extend([KebaNumber(wallbox, number_description)])
     async_add_entities(entities, True)
 
 
 class KebaNumber(KebaBaseEntity, NumberEntity):
     """Representation of a MusicCast Number entity."""
-
-    capability: NumberSetter
 
     def __init__(
         self,

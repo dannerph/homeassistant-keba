@@ -14,6 +14,7 @@ from homeassistant.const import (
     PERCENTAGE,
     POWER_KILO_WATT,
     TIME_SECONDS,
+    CONF_HOST
 )
 
 from homeassistant.core import HomeAssistant
@@ -244,14 +245,14 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the BMW ConnectedDrive sensors from config entry."""
+    """Set up the Keba charging station sensors from config entry."""
     keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
     entities: list[KebaSensor] = []
 
-    for wallbox in keba.get_wallboxes():
-        entities.extend(
-            [KebaSensor(wallbox, description) for description in SENSOR_TYPES]
-        )
+    wallbox = keba.get_wallbox(config_entry.data[CONF_HOST])
+    entities.extend(
+        [KebaSensor(wallbox, description) for description in SENSOR_TYPES]
+    )
     async_add_entities(entities, True)
 
 
