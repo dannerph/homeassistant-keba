@@ -4,16 +4,16 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from keba_kecontact.connection import KebaKeContact
+from keba_kecontact.wallbox import Wallbox
+
 from homeassistant.components.notify import (
     ATTR_DATA,
     ATTR_TARGET,
     BaseNotificationService,
 )
-
-from keba_kecontact.connection import KebaKeContact
-from keba_kecontact.wallbox import Wallbox
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from . import DOMAIN, KEBA_CONNECTION
 

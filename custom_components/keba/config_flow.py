@@ -1,32 +1,30 @@
 """Config flow for keba integration."""
 from __future__ import annotations
 
+from ipaddress import ip_network
+import logging
 from typing import Any
 
+from keba_kecontact.connection import SetupError
 import voluptuous as vol
-import logging
 
 from homeassistant import config_entries, core, exceptions
-from homeassistant.const import CONF_HOST
-from homeassistant.data_entry_flow import FlowResult
-from homeassistant.core import callback
-
 from homeassistant.components import network
-from ipaddress import ip_network
-
+from homeassistant.const import CONF_HOST
+from homeassistant.core import callback
+from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
 
+from . import setup_keba_connection
 from .const import (
+    CONF_FS,
+    CONF_FS_FALLBACK,
     CONF_FS_PERSIST,
+    CONF_FS_TIMEOUT,
     CONF_RFID,
     CONF_RFID_CLASS,
     DOMAIN,
-    CONF_FS,
-    CONF_FS_TIMEOUT,
-    CONF_FS_FALLBACK,
 )
-from . import setup_keba_connection
-from keba_kecontact.connection import SetupError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -74,7 +72,7 @@ class KebaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
 
             # check if IP address is set manually
-            if host := user_input.get(CONF_HOST):
+            if user_input.get(CONF_HOST):
                 return await self.async_step_connect(user_input)
 
             # discovery using keba library
@@ -86,10 +84,12 @@ class KebaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     local_ip = ip_info["address"]
                     network_prefix = ip_info["network_prefix"]
                     ip_net = ip_network(f"{local_ip}/{network_prefix}", False)
-                    discovered_devices = await keba.discover_devices(str(ip_net.broadcast_address))
-                    for d in discovered_devices:
-                        if d not in self._discovered_devices:
-                            self._discovered_devices.append(d)
+                    discovered_devices = await keba.discover_devices(
+                        str(ip_net.broadcast_address)
+                    )
+                    for device in discovered_devices:
+                        if device not in self._discovered_devices:
+                            self._discovered_devices.append(device)
 
             # More than one receiver could be discovered by that method
             if len(self._discovered_devices) == 1:
@@ -113,16 +113,10 @@ class KebaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_connect(user_input)
 
         select_scheme = vol.Schema(
-            {
-                vol.Required("host"): vol.In(
-                    [d for d in self._discovered_devices]
-                )
-            }
+            {vol.Required("host"): vol.In(list(self._discovered_devices))}
         )
 
-        return self.async_show_form(
-            step_id="select", data_schema=select_scheme
-        )
+        return self.async_show_form(step_id="select", data_schema=select_scheme)
 
     async def async_step_connect(
         self, user_input: dict[str, Any] | None = None
@@ -130,23 +124,24 @@ class KebaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Connect to the keba charging station."""
         errors: dict[str, str] = {}
         info = None
-        try:
-            info = await validate_input(self.hass, user_input)
-        except CannotConnect:
-            errors["base"] = "cannot_connect"
-        except Exception:  # pylint: disable=broad-except
-            _LOGGER.exception("Unexpected exception")
-            errors["base"] = "unknown"
 
-        if info:
-            await self.async_set_unique_id(info["unique_id"])
-            self._abort_if_unique_id_configured()
-            return self.async_create_entry(title=info["title"], data=user_input)
+        if user_input:
+            try:
+                info = await validate_input(self.hass, user_input)
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+
+            if info:
+                await self.async_set_unique_id(info["unique_id"])
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(title=info["title"], data=user_input)
 
         return self.async_show_form(
             step_id="user", data_schema=STEP_HOST_SCHEMA, errors=errors
         )
-
 
     @staticmethod
     @callback

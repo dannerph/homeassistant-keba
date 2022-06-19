@@ -89,7 +89,7 @@ set_current:
           unit_of_measurement: A
     delay:
       name: Delay
-      description: The delay in seconds after which the definded current should be set.
+      description: The delay in seconds after which the defined current should be set.
       default: 0
       selector:
         number:
@@ -135,7 +135,7 @@ set_failsafe:
     failsafe_persist:
       name: Failsafe persist
       description: If failsafe_persist is False, the failsafe option is only used until charging station reboot. If failsafe_persist is True, the failsafe option will survive a reboot.
-      default: False
+      default: false
       selector:
         boolean:
 

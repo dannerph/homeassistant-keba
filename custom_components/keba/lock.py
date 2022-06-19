@@ -1,23 +1,26 @@
 """Support for KEBA charging station switch."""
 from __future__ import annotations
 
-from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.components.lock import LockEntityDescription, LockEntity
-
-from . import KebaBaseEntity
-from .const import CONF_RFID, CONF_RFID_CLASS, DOMAIN, KEBA_CONNECTION
-from homeassistant.const import CONF_HOST
+from typing import Any
 
 from keba_kecontact.connection import KebaKeContact
 from keba_kecontact.wallbox import Wallbox
+
+from homeassistant.components.lock import LockEntity, LockEntityDescription
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+from . import KebaBaseEntity
+from .const import CONF_RFID, CONF_RFID_CLASS, DOMAIN, KEBA_CONNECTION
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
     """Set up the keba charging station locks from config entry."""
     keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
@@ -54,10 +57,10 @@ class KebaLock(KebaBaseEntity, LockEntity):
         """Get latest cached states from the device."""
         self._attr_is_locked = self._wallbox.get_value(self.entity_description.key) == 1
 
-    async def async_lock(self, **kwargs):
+    async def async_lock(self, **kwargs: Any) -> None:
         """Lock wallbox."""
         await self._wallbox.stop(**self._additional_args)
 
-    async def async_unlock(self, **kwargs):
+    async def async_unlock(self, **kwargs: Any) -> None:
         """Unlock wallbox."""
         await self._wallbox.start(**self._additional_args)

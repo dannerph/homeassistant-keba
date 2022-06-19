@@ -1,32 +1,31 @@
 """Support for KEBA charging station sensors."""
 from __future__ import annotations
 
+from keba_kecontact.connection import KebaKeContact
+from keba_kecontact.wallbox import Wallbox
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
+    CONF_HOST,
     ELECTRIC_CURRENT_AMPERE,
     ELECTRIC_POTENTIAL_VOLT,
     ENERGY_KILO_WATT_HOUR,
     PERCENTAGE,
     POWER_KILO_WATT,
     TIME_SECONDS,
-    CONF_HOST
 )
-
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import KebaBaseEntity
 from .const import DOMAIN, KEBA_CONNECTION
-
-from keba_kecontact.connection import KebaKeContact
-from keba_kecontact.wallbox import Wallbox
 
 SENSOR_TYPES = [
     # default
@@ -250,9 +249,7 @@ async def async_setup_entry(
     entities: list[KebaSensor] = []
 
     wallbox = keba.get_wallbox(config_entry.data[CONF_HOST])
-    entities.extend(
-        [KebaSensor(wallbox, description) for description in SENSOR_TYPES]
-    )
+    entities.extend([KebaSensor(wallbox, description) for description in SENSOR_TYPES])
     async_add_entities(entities, True)
 
 

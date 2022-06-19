@@ -3,9 +3,10 @@
   "name": "Keba Charging Station",
   "config_flow": true,
   "documentation": "https://www.home-assistant.io/integrations/keba",
-  "requirements": ["keba-kecontact==2.2.5"],
-  "version": "2.2.5",
+  "requirements": ["keba-kecontact==2.2.6"],
   "codeowners": ["@dannerph"],
   "iot_class": "local_polling",
-  "loggers": ["keba_kecontact"]
+  "loggers": ["keba_kecontact"],
+  "dependencies": ["network"],
+  "version": "2.2.6"
 }

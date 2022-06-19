@@ -1,23 +1,22 @@
 """Support for KEBA charging station binary sensors."""
 from __future__ import annotations
 
+from keba_kecontact.connection import KebaKeContact
+from keba_kecontact.wallbox import Wallbox
+
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
-from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.const import CONF_HOST
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import KebaBaseEntity
 from .const import DOMAIN, KEBA_CONNECTION
-from homeassistant.const import CONF_HOST
-
-from keba_kecontact.connection import KebaKeContact
-from keba_kecontact.wallbox import Wallbox
-
 
 SENSOR_TYPES = [
     # default
