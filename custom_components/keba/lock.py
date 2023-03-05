@@ -20,7 +20,6 @@ async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
     """Set up the keba charging station locks from config entry."""
     keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
@@ -53,7 +52,7 @@ class KebaLock(KebaBaseEntity, LockEntity):
         super().__init__(wallbox, description)
         self._additional_args = additional_args if additional_args is not None else {}
 
-    async def async_update(self):
+    async def async_update(self) -> None:
         """Get latest cached states from the device."""
         self._attr_is_locked = self._wallbox.get_value(self.entity_description.key) == 1
 

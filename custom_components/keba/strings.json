@@ -18,7 +18,7 @@
   },
   "options": {
     "step": {
-      "wallbox_options": {
+      "init": {
         "data": {
           "failsafe": "Failsafe mode",
           "failsafe_timeout": "Failsafe timeout (in seconds)",
@@ -28,6 +28,12 @@
           "rfid_class": "RFID class for default authentication (color code, optional)"
         }
       }
+    }
+  },
+  "issues": {
+    "deprecated_yaml": {
+      "description": "Your existing YAML configuration has been imported into the UI automatically.\n\nRemove the keba YAML configuration from your configuration.yaml file and restart Home Assistant to fix this issue.\n\nDue to internal restructuring, you may need to update automations, scripts and your dashboard.",
+      "title": "YAML configuring of Keba is no longer used."
     }
   }
 }

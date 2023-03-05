@@ -13,6 +13,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry, discovery
 from homeassistant.helpers.entity import DeviceInfo, Entity, EntityDescription
+from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import slugify
 
@@ -47,12 +48,20 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.data[DOMAIN][DATA_HASS_CONFIG] = config
 
     if DOMAIN in config:
+        async_create_issue(
+            hass,
+            DOMAIN,
+            "deprecated_yaml",
+            breaks_in_ha_version="2023.4.0",
+            is_fixable=False,
+            severity=IssueSeverity.WARNING,
+            translation_key="deprecated_yaml",
+        )
         hass.async_create_task(
             hass.config_entries.flow.async_init(
                 DOMAIN, context={"source": SOURCE_IMPORT}, data=config[DOMAIN]
             )
         )
-
     return True
 
 
@@ -66,18 +75,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][WALLBOXES][entry.entry_id] = wallbox
 
-    # Set failsafe mode at start up of Home Assistant
-    try:
-        fs_timeout = entry.options[CONF_FS_TIMEOUT] if entry.options[CONF_FS] else 0
+    # Set failsafe mode at start up of Home Assistant if configured in options
+    if CONF_FS in entry.options:
+        fs_mode = entry.options[CONF_FS]
+        fs_timeout = entry.options[CONF_FS_TIMEOUT]
         fs_fallback = entry.options[CONF_FS_FALLBACK]
         fs_persist = entry.options[CONF_FS_PERSIST]
-        hass.loop.create_task(wallbox.set_failsafe(fs_timeout, fs_fallback, fs_persist))
-    except KeyError:
-        _LOGGER.debug(
-            "Options for charging station %s not available", wallbox.device_info.model
-        )
-    except ValueError as ex:
-        _LOGGER.warning("Could not set failsafe mode %s", ex)
+        try:
+            hass.loop.create_task(
+                wallbox.set_failsafe(fs_mode, fs_timeout, fs_fallback, fs_persist)
+            )
+        except ValueError as ex:
+            _LOGGER.warning("Could not set failsafe mode %s", ex)
 
     # Add update listener for config entry changes (options)
     entry.async_on_unload(entry.add_update_listener(update_listener))
@@ -85,7 +94,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register services to hass
     async def execute_service(call: ServiceCall) -> None:
         """Execute a service for a wallbox."""
-        device_id: str | None = str(call.data.get(CONF_DEVICE_ID))
+        device_id: str = str(call.data.get(CONF_DEVICE_ID))
         wallbox: Wallbox | None = None
 
         # from device_id to wallbox
@@ -95,10 +104,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         config_entry = hass.config_entries.async_get_entry(
             next(iter(device.config_entries))
         )
-        host = config_entry.data[CONF_HOST]
-        if not (wallbox := keba.get_wallbox(host)):
-            _LOGGER.error("Could not find a charging station with host %s", host)
-            return
+        if config_entry is not None:
+            host = config_entry.data[CONF_HOST]
+            if not (wallbox := keba.get_wallbox(host)):
+                _LOGGER.error("Could not find a charging station with host %s", host)
+                return
+        else:
+            _LOGGER.fatal("Config entry for device %s not valid", str(device))
 
         function_call = getattr(wallbox, call.service)
 
@@ -136,10 +148,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_register(DOMAIN, service, execute_service)
 
     # Load platforms
-    hass.config_entries.async_setup_platforms(
+    await hass.config_entries.async_forward_entry_setups(
         entry, [platform for platform in PLATFORMS if platform != Platform.NOTIFY]
     )
-
+    # hass.config_entries.async_setup_platforms(
+    #     entry, [platform for platform in PLATFORMS if platform != Platform.NOTIFY]
+    # )
     return True
 
 
@@ -219,7 +233,7 @@ class KebaBaseEntity(Entity):
             configuration_url=wb_info.webconfigurl,
         )
 
-    def update_callback(self, wallbox: Wallbox, data) -> None:
+    def update_callback(self, *args) -> None:
         """Schedule a state update."""
         self.schedule_update_ha_state(True)
 

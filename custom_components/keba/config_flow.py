@@ -55,13 +55,12 @@ class KebaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
 
-    def __init__(self):
-        """Initialize the Denon AVR flow."""
-        self._discovered_devices = []
+    def __init__(self) -> None:
+        """Initialize the Keba flow."""
+        self._discovered_devices: list[str] = []
 
-    async def async_step_import(self, import_data):
+    async def async_step_import(self, import_data) -> FlowResult:
         """Import keba config from configuration.yaml."""
-
         return await self.async_step_connect(import_data)
 
     async def async_step_user(
@@ -70,7 +69,6 @@ class KebaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the initial step."""
         errors: dict[str, str] = {}
         if user_input is not None:
-
             # check if IP address is set manually
             if user_input.get(CONF_HOST):
                 return await self.async_step_connect(user_input)
@@ -91,7 +89,7 @@ class KebaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         if device not in self._discovered_devices:
                             self._discovered_devices.append(device)
 
-            # More than one receiver could be discovered by that method
+            # More than one charging station could be discovered by that method
             if len(self._discovered_devices) == 1:
                 user_input[CONF_HOST] = self._discovered_devices[0]
                 return await self.async_step_connect(user_input)
@@ -163,17 +161,11 @@ class KebaOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage the options."""
-        return await self.async_step_wallbox_options()
-
-    async def async_step_wallbox_options(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
         """Handle the initial step."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
         return self.async_show_form(
-            step_id="wallbox_options",
+            step_id="init",
             data_schema=vol.Schema(
                 {
                     vol.Required(

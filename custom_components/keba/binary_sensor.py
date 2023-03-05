@@ -1,6 +1,9 @@
 """Support for KEBA charging station binary sensors."""
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from keba_kecontact.connection import KebaKeContact
 from keba_kecontact.wallbox import Wallbox
 
@@ -10,9 +13,8 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST
+from homeassistant.const import CONF_HOST, EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import KebaBaseEntity
@@ -92,11 +94,11 @@ class KebaBinarySensor(KebaBaseEntity, BinarySensorEntity):
         self._attributes: dict[str, str] = {}
 
     @property
-    def extra_state_attributes(self):
+    def extra_state_attributes(self) -> Mapping[str, Any] | None:
         """Return the state attributes of the binary sensor."""
         return self._attributes
 
-    async def async_update(self):
+    async def async_update(self) -> None:
         """Get latest cached states from the device."""
         key = self.entity_description.key
         self._attr_is_on = self._wallbox.get_value(key)

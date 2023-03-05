@@ -1,34 +1,39 @@
 {
-  "config": {
-    "step": {
-      "user": {
-        "data": {
-          "description": "Connect to your charging station, if the IP address is not set, auto-discovery is used",
-          "host": "Host (IP Address)"
+    "config": {
+        "abort": {
+            "already_configured": "Charging station already configured."
+        },
+        "error": {
+            "cannot_connect": "Could not connect to the charging station.",
+            "no_device_found": "No device was found in your network.",
+            "unknown": "Unkown error occured. Please check the logs."
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "host": "Host (IP Address)"
+                }
+            }
         }
-      }
     },
-    "error": {
-      "cannot_connect": "Could not connect to the charging station.",
-      "unknown": "Unkown error occured. Please check the logs.",
-      "no_device_found": "No device was found in your network."
-    },
-    "abort": {
-      "already_configured": "Charging station already configured."
-    }
-  },
-  "options": {
-    "step": {
-      "wallbox_options": {
-        "data": {
-          "failsafe": "Failsafe mode",
-          "failsafe_timeout": "Failsafe timeout (in seconds)",
-          "failsafe_fallback": "Failsafe fallback current (in Ampere)",
-          "failsafe_persist": "Persist failsafe option",
-          "rfid": "RFID tag for default authentication (Optional)",
-          "rfid_class": "RFID class for default authentication (color code, optional)"
+    "issues": {
+        "deprecated_yaml": {
+            "description": "Your existing YAML configuration has been imported into the UI automatically.\n\nRemove the keba YAML configuration from your configuration.yaml file and restart Home Assistant to fix this issue.\n\nDue to internal restructuring, you may need to update automations, scripts and your dashboard.",
+            "title": "YAML configuring of Keba is no longer used."
         }
-      }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "failsafe": "Failsafe mode",
+                    "failsafe_fallback": "Failsafe fallback current (in Ampere)",
+                    "failsafe_persist": "Persist failsafe option",
+                    "failsafe_timeout": "Failsafe timeout (in seconds)",
+                    "rfid": "RFID tag for default authentication (Optional)",
+                    "rfid_class": "RFID class for default authentication (color code, optional)"
+                }
+            }
+        }
     }
-  }
 }
