@@ -1,18 +1,16 @@
 """Number entities for keba."""
 
+from keba_kecontact.connection import KebaKeContact
+from keba_kecontact.wallbox import Wallbox
+
 from homeassistant.components.number import NumberEntity, NumberEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, UnitOfElectricCurrent
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from homeassistant.const import ELECTRIC_CURRENT_AMPERE, CONF_HOST
-
 from . import KebaBaseEntity
 from .const import DOMAIN, KEBA_CONNECTION
-
-from keba_kecontact.connection import KebaKeContact
-from keba_kecontact.wallbox import Wallbox
 
 
 async def async_setup_entry(
@@ -38,7 +36,7 @@ async def async_setup_entry(
 
 
 class KebaNumber(KebaBaseEntity, NumberEntity):
-    """Representation of a MusicCast Number entity."""
+    """Representation of a keba Number entity."""
 
     def __init__(
         self,
@@ -47,24 +45,12 @@ class KebaNumber(KebaBaseEntity, NumberEntity):
     ) -> None:
         """Initialize the number entity."""
         super().__init__(wallbox, description)
-        self._attr_min_value = 6
-        self._attr_max_value = (
-            63
-            if self._wallbox.get_value("Curr HW") is None
-            else self._wallbox.get_value("Curr HW")
-        )
-        self._attr_step = 1
-
-    @property
-    def value(self):
-        """Return the current value."""
-        return self._wallbox.get_value(self.entity_description.key)
 
     async def async_update(self) -> None:
         """Update the number with latest cached states from the device."""
         self._attr_native_max_value = self._wallbox.get_value("Curr HW")
         self._attr_native_value = self._wallbox.get_value(self.entity_description.key)
 
-    async def async_set_value(self, value: float):
+    async def async_set_native_value(self, value: float) -> None:
         """Set a new value."""
         await self._wallbox.set_current(value)
