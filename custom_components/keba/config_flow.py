@@ -15,7 +15,7 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
 
-from . import setup_keba_connection
+from . import get_keba_connection
 from .const import (
     CONF_FS,
     CONF_FS_FALLBACK,
@@ -39,7 +39,7 @@ async def validate_input(
     hass: core.HomeAssistant, data: dict[str, Any]
 ) -> dict[str, str]:
     """Validate given keba charging station host by setting it up."""
-    keba = await setup_keba_connection(hass)
+    keba = await get_keba_connection(hass)
     try:
         device_info = await keba.get_device_info(data[CONF_HOST])
     except SetupError as exc:
@@ -74,7 +74,7 @@ class KebaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_connect(user_input)
 
             # discovery using keba library
-            keba = await setup_keba_connection(self.hass)
+            keba = await get_keba_connection(self.hass)
 
             adapters = await network.async_get_adapters(self.hass)
             for adapter in adapters:

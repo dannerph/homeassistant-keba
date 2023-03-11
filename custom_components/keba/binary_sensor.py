@@ -4,8 +4,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from keba_kecontact.chargingstation import ChargingStation
 from keba_kecontact.connection import KebaKeContact
-from keba_kecontact.wallbox import Wallbox
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -39,7 +39,7 @@ SENSOR_TYPES = [
     ),
     # optional
     BinarySensorEntityDescription(
-        key="Plug_wallbox",
+        key="Plug_charging_station",
         name="Cable plugged on charging station",
         device_class=BinarySensorDeviceClass.PLUG,
         entity_registry_enabled_default=False,
@@ -74,9 +74,12 @@ async def async_setup_entry(
     keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
     entities: list[KebaBinarySensor] = []
 
-    wallbox = keba.get_wallbox(config_entry.data[CONF_HOST])
+    charging_station = keba.get_charging_station(config_entry.data[CONF_HOST])
     entities.extend(
-        [KebaBinarySensor(wallbox, description) for description in SENSOR_TYPES]
+        [
+            KebaBinarySensor(charging_station, description)
+            for description in SENSOR_TYPES
+        ]
     )
     async_add_entities(entities, True)
 
@@ -86,11 +89,11 @@ class KebaBinarySensor(KebaBaseEntity, BinarySensorEntity):
 
     def __init__(
         self,
-        wallbox: Wallbox,
+        charging_station: ChargingStation,
         description: BinarySensorEntityDescription,
     ) -> None:
         """Initialize the KEBA Sensor."""
-        super().__init__(wallbox, description)
+        super().__init__(charging_station, description)
         self._attributes: dict[str, str] = {}
 
     @property
@@ -101,13 +104,13 @@ class KebaBinarySensor(KebaBaseEntity, BinarySensorEntity):
     async def async_update(self) -> None:
         """Get latest cached states from the device."""
         key = self.entity_description.key
-        self._attr_is_on = self._wallbox.get_value(key)
+        self._attr_is_on = self._charging_station.get_value(key)
 
         if key == "FS_on":
             self._attr_is_on = not self._attr_is_on
             self._attributes["failsafe_timeout"] = str(
-                self._wallbox.get_value("Tmo FS")
+                self._charging_station.get_value("Tmo FS")
             )
             self._attributes["fallback_current"] = str(
-                self._wallbox.get_value("Curr FS")
+                self._charging_station.get_value("Curr FS")
             )

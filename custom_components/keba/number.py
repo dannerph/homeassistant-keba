@@ -1,7 +1,7 @@
 """Number entities for keba."""
 
+from keba_kecontact.chargingstation import ChargingStation
 from keba_kecontact.connection import KebaKeContact
-from keba_kecontact.wallbox import Wallbox
 
 from homeassistant.components.number import NumberEntity, NumberEntityDescription
 from homeassistant.config_entries import ConfigEntry
@@ -22,7 +22,7 @@ async def async_setup_entry(
     keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
     entities: list[KebaNumber] = []
 
-    wallbox = keba.get_wallbox(config_entry.data[CONF_HOST])
+    charging_station = keba.get_charging_station(config_entry.data[CONF_HOST])
     number_description = NumberEntityDescription(
         key="Curr user",
         name="Charging current",
@@ -31,7 +31,7 @@ async def async_setup_entry(
         native_max_value=63,  # technical maximum
         native_step=1,  # technically possible step
     )
-    entities.extend([KebaNumber(wallbox, number_description)])
+    entities.extend([KebaNumber(charging_station, number_description)])
     async_add_entities(entities, True)
 
 
@@ -40,17 +40,19 @@ class KebaNumber(KebaBaseEntity, NumberEntity):
 
     def __init__(
         self,
-        wallbox: Wallbox,
+        charging_station: ChargingStation,
         description: NumberEntityDescription,
     ) -> None:
         """Initialize the number entity."""
-        super().__init__(wallbox, description)
+        super().__init__(charging_station, description)
 
     async def async_update(self) -> None:
         """Update the number with latest cached states from the device."""
-        self._attr_native_max_value = self._wallbox.get_value("Curr HW")
-        self._attr_native_value = self._wallbox.get_value(self.entity_description.key)
+        self._attr_native_max_value = self._charging_station.get_value("Curr HW")
+        self._attr_native_value = self._charging_station.get_value(
+            self.entity_description.key
+        )
 
     async def async_set_native_value(self, value: float) -> None:
         """Set a new value."""
-        await self._wallbox.set_current(value)
+        await self._charging_station.set_current(value)

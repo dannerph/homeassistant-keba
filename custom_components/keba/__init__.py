@@ -3,12 +3,17 @@ from __future__ import annotations
 
 import logging
 
-from keba_kecontact.connection import KebaKeContact, SetupError
-from keba_kecontact.wallbox import Wallbox
+from keba_kecontact.chargingstation import ChargingStation, KebaService
+from keba_kecontact.connection import KebaKeContact, SetupError, create_keba_connection
 
-from homeassistant.components.notify import DOMAIN as NOTIFY_DOMAIN
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.const import CONF_DEVICE_ID, CONF_HOST, CONF_NAME, Platform
+from homeassistant.const import (
+    CONF_DEVICE_ID,
+    CONF_ENTITY_ID,
+    CONF_HOST,
+    CONF_NAME,
+    Platform,
+)
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry, discovery
@@ -18,6 +23,7 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import slugify
 
 from .const import (
+    CHARGING_STATIONS,
     CONF_FS,
     CONF_FS_FALLBACK,
     CONF_FS_PERSIST,
@@ -27,7 +33,6 @@ from .const import (
     DATA_HASS_CONFIG,
     DOMAIN,
     KEBA_CONNECTION,
-    WALLBOXES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,7 +57,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             hass,
             DOMAIN,
             "deprecated_yaml",
-            breaks_in_ha_version="2023.4.0",
             is_fixable=False,
             severity=IssueSeverity.WARNING,
             translation_key="deprecated_yaml",
@@ -65,54 +69,77 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up KEBA charging station from a config entry."""
-    keba = await setup_keba_connection(hass)
-    try:
-        wallbox = await keba.setup_wallbox(entry.data[CONF_HOST])
-    except SetupError as exc:
-        raise ConfigEntryNotReady(f"{entry.data[CONF_HOST]} not reachable") from exc
-
-    hass.data[DOMAIN][WALLBOXES][entry.entry_id] = wallbox
-
-    # Set failsafe mode at start up of Home Assistant if configured in options
+async def _async_set_failsafe(hass: HomeAssistant, entry: ConfigEntry):
     if CONF_FS in entry.options:
-        fs_mode = entry.options[CONF_FS]
-        fs_timeout = entry.options[CONF_FS_TIMEOUT]
-        fs_fallback = entry.options[CONF_FS_FALLBACK]
-        fs_persist = entry.options[CONF_FS_PERSIST]
+        charging_station = hass.data[DOMAIN][CHARGING_STATIONS][entry.entry_id]
         try:
             hass.loop.create_task(
-                wallbox.set_failsafe(fs_mode, fs_timeout, fs_fallback, fs_persist)
+                charging_station.set_failsafe(
+                    entry.options[CONF_FS],
+                    entry.options[CONF_FS_TIMEOUT],
+                    entry.options[CONF_FS_FALLBACK],
+                    entry.options[CONF_FS_PERSIST],
+                )
             )
         except ValueError as ex:
             _LOGGER.warning("Could not set failsafe mode %s", ex)
 
-    # Add update listener for config entry changes (options)
-    entry.async_on_unload(entry.add_update_listener(update_listener))
+
+def _get_charging_station(
+    hass: HomeAssistant, device_id: str
+) -> ChargingStation | None:
+    # Get and check home assistant device linked to device_id
+    device = device_registry.async_get(hass).async_get(device_id)
+    if not device:
+        _LOGGER.error("Could not find a device for id: %s", device_id)
+        return None
+
+    # Get and check config_entry of givne home assistant device
+    config_entry = hass.config_entries.async_get_entry(
+        next(iter(device.config_entries))
+    )
+    if config_entry is None:
+        _LOGGER.fatal("Config entry for device %s not valid", str(device))
+        return None
+
+    # Get and check keba charging station from host in config_entry
+    keba = hass.data[DOMAIN][KEBA_CONNECTION]
+    host = config_entry.data[CONF_HOST]
+    charging_station = keba.get_charging_station(host)
+    if charging_station is None:
+        _LOGGER.error("Could not find a charging station with host %s", host)
+        return None
+
+    return charging_station
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up KEBA charging station from a config entry."""
+    keba = await get_keba_connection(hass)
+    try:
+        charging_station = await keba.setup_charging_station(entry.data[CONF_HOST])
+    except SetupError as exc:
+        raise ConfigEntryNotReady(f"{entry.data[CONF_HOST]} not reachable") from exc
+
+    hass.data[DOMAIN][CHARGING_STATIONS][entry.entry_id] = charging_station
+
+    # Set failsafe mode at start up of Home Assistant if configured in options
+    await _async_set_failsafe(hass, entry)
+
+    # # Add update listener for config entry changes (options)
+    # entry.async_on_unload(entry.add_update_listener(update_listener))
 
     # Register services to hass
     async def execute_service(call: ServiceCall) -> None:
-        """Execute a service for a wallbox."""
+        """Execute a service for a charging station."""
         device_id: str = str(call.data.get(CONF_DEVICE_ID))
-        wallbox: Wallbox | None = None
-
-        # from device_id to wallbox
-        if not (device := device_registry.async_get(hass).async_get(device_id)):
-            _LOGGER.error("Could not find a device for id: %s", device_id)
-            return
-        config_entry = hass.config_entries.async_get_entry(
-            next(iter(device.config_entries))
+        charging_station: ChargingStation | None = _get_charging_station(
+            hass, device_id
         )
-        if config_entry is not None:
-            host = config_entry.data[CONF_HOST]
-            if not (wallbox := keba.get_wallbox(host)):
-                _LOGGER.error("Could not find a charging station with host %s", host)
-                return
-        else:
-            _LOGGER.fatal("Config entry for device %s not valid", str(device))
+        if charging_station is None:
+            return
 
-        function_call = getattr(wallbox, call.service)
+        function_call = getattr(charging_station, call.service)
 
         additional_args = {}
         if call.service in ["start", "stop"]:
@@ -131,29 +158,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         await function_call(**call.data, **additional_args)
 
-    for service in wallbox.device_info.available_services():
-        if service == "display":
+    for service in charging_station.device_info.available_services():
+        if service != KebaService.DISPLAY:
+            hass.services.async_register(DOMAIN, service.value, execute_service)
+        else:
             # set up notify platform, no entry support for notify platform yet,
             # have to use discovery to load platform.
             hass.async_create_task(
                 discovery.async_load_platform(
                     hass,
-                    NOTIFY_DOMAIN,
+                    Platform.NOTIFY,
                     DOMAIN,
-                    {CONF_NAME: DOMAIN},
+                    {CONF_NAME: DOMAIN, CONF_ENTITY_ID: entry.entry_id},
                     hass.data[DOMAIN][DATA_HASS_CONFIG],
                 )
             )
-        else:
-            hass.services.async_register(DOMAIN, service, execute_service)
 
-    # Load platforms
+    # Set up all platforms except notify
     await hass.config_entries.async_forward_entry_setups(
         entry, [platform for platform in PLATFORMS if platform != Platform.NOTIFY]
     )
-    # hass.config_entries.async_setup_platforms(
-    #     entry, [platform for platform in PLATFORMS if platform != Platform.NOTIFY]
-    # )
+
     return True
 
 
@@ -166,60 +191,61 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     # Remove notify
-    wallbox = keba.get_wallbox(entry.data[CONF_HOST])
-    if "display" in wallbox.device_info.available_services():
+    charging_station = keba.get_charging_station(entry.data[CONF_HOST])
+    if KebaService.DISPLAY in charging_station.device_info.available_services():
         hass.services.async_remove(
-            NOTIFY_DOMAIN, f"{DOMAIN}_{slugify(wallbox.device_info.model)}"
+            Platform.NOTIFY, f"{DOMAIN}_{slugify(charging_station.device_info.model)}"
         )
 
-    # Only remove services if it is the last wallbox
-    if len(hass.data[DOMAIN][WALLBOXES]) == 1:
+    # Only remove services if it is the last charging station
+    if len(hass.data[DOMAIN][CHARGING_STATIONS]) == 1:
         _LOGGER.debug("Removing last charging station, cleanup services and notify")
 
-        for service in wallbox.device_info.available_services():
-            if service == "display":
-                hass.services.async_remove(NOTIFY_DOMAIN, DOMAIN)
+        for service in charging_station.device_info.available_services():
+            if service == KebaService.DISPLAY:
+                hass.services.async_remove(Platform.NOTIFY, DOMAIN)
             else:
-                hass.services.async_remove(DOMAIN, service)
+                hass.services.async_remove(DOMAIN, service.value)
 
     if unload_ok:
-        keba.remove_wallbox(entry.data[CONF_HOST])
-        hass.data[DOMAIN][WALLBOXES].pop(entry.entry_id)
+        keba.remove_charging_station(entry.data[CONF_HOST])
+        hass.data[DOMAIN][CHARGING_STATIONS].pop(entry.entry_id)
 
     return unload_ok
 
 
-async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
-    """Handle options update."""
-    await hass.config_entries.async_reload(config_entry.entry_id)
+# async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
+#     """Handle options update."""
+#     await hass.config_entries.async_reload(config_entry.entry_id)
+#     print("test")
 
 
-async def setup_keba_connection(hass: HomeAssistant) -> KebaKeContact:
+async def get_keba_connection(hass: HomeAssistant) -> KebaKeContact:
     """Set up internal keba connection (ensure same keba connection instance)."""
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN].setdefault(WALLBOXES, {})
+    hass.data[DOMAIN].setdefault(CHARGING_STATIONS, {})
 
     if KEBA_CONNECTION not in hass.data[DOMAIN]:
-        hass.data[DOMAIN][KEBA_CONNECTION] = KebaKeContact(hass.loop)
+        hass.data[DOMAIN][KEBA_CONNECTION] = await create_keba_connection(hass.loop)
 
     return hass.data[DOMAIN][KEBA_CONNECTION]
 
 
 class KebaBaseEntity(Entity):
-    """Common base for Keba Wallbox entities."""
+    """Common base for Keba charging station entities."""
 
     _attr_should_poll = False
 
     def __init__(
         self,
-        wallbox: Wallbox,
+        charging_station: ChargingStation,
         description: EntityDescription,
     ) -> None:
         """Initialize sensor."""
-        self._wallbox = wallbox
+        self._charging_station = charging_station
         self.entity_description = description
 
-        wb_info = self._wallbox.device_info
+        wb_info = self._charging_station.device_info
 
         self._attr_name = f"{wb_info.manufacturer} {wb_info.model} {description.name}"
         self._attr_unique_id = f"{DOMAIN}-{wb_info.device_id}-{description.key}"
@@ -242,4 +268,4 @@ class KebaBaseEntity(Entity):
 
         Show latest data after startup.
         """
-        self._wallbox.add_callback(self.update_callback)
+        self._charging_station.add_callback(self.update_callback)

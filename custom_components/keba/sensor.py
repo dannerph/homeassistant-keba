@@ -4,8 +4,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from keba_kecontact.chargingstation import ChargingStation
 from keba_kecontact.connection import KebaKeContact
-from keba_kecontact.wallbox import Wallbox
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -251,8 +251,10 @@ async def async_setup_entry(
     keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
     entities: list[KebaSensor] = []
 
-    wallbox = keba.get_wallbox(config_entry.data[CONF_HOST])
-    entities.extend([KebaSensor(wallbox, description) for description in SENSOR_TYPES])
+    charging_station = keba.get_charging_station(config_entry.data[CONF_HOST])
+    entities.extend(
+        [KebaSensor(charging_station, description) for description in SENSOR_TYPES]
+    )
     async_add_entities(entities, True)
 
 
@@ -261,11 +263,11 @@ class KebaSensor(KebaBaseEntity, SensorEntity):
 
     def __init__(
         self,
-        wallbox: Wallbox,
+        charging_station: ChargingStation,
         description: SensorEntityDescription,
     ) -> None:
         """Initialize the KEBA Sensor."""
-        super().__init__(wallbox, description)
+        super().__init__(charging_station, description)
         self._attributes: dict[str, str] = {}
 
     @property
@@ -275,9 +277,11 @@ class KebaSensor(KebaBaseEntity, SensorEntity):
 
     async def async_update(self) -> None:
         """Get latest cached states from the device."""
-        self._attr_native_value = self._wallbox.get_value(self.entity_description.key)
+        self._attr_native_value = self._charging_station.get_value(
+            self.entity_description.key
+        )
 
         if self.entity_description.key == "Curr user":
-            self._attributes["max_current_hardware"] = self._wallbox.get_value(
+            self._attributes["max_current_hardware"] = self._charging_station.get_value(
                 "Curr HW"
             )
