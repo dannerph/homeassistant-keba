@@ -55,4 +55,4 @@ class KebaNumber(KebaBaseEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set a new value."""
-        await self._charging_station.set_current(value)
+        await self._charging_station.set_current(current=value, delay=1)

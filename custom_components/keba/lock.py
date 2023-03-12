@@ -31,11 +31,11 @@ async def async_setup_entry(
     additional_args = {}
     if CONF_RFID in entry.options and entry.options[CONF_RFID] != "":
         additional_args[CONF_RFID] = entry.options[CONF_RFID]
-    if CONF_RFID_CLASS in entry.options and entry.options[CONF_RFID_CLASS] != "":
-        additional_args[CONF_RFID_CLASS] = entry.options[CONF_RFID_CLASS]
+        if CONF_RFID_CLASS in entry.options and entry.options[CONF_RFID_CLASS] != "":
+            additional_args[CONF_RFID_CLASS] = entry.options[CONF_RFID_CLASS]
 
-    lock = KebaLock(charging_station, lock_description, additional_args)
-    entities.append(lock)
+        lock = KebaLock(charging_station, lock_description, additional_args)
+        entities.append(lock)
     async_add_entities(entities, True)
 
 

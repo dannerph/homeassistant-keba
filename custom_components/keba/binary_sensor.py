@@ -37,6 +37,11 @@ SENSOR_TYPES = [
         name="Charging",
         device_class=BinarySensorDeviceClass.POWER,
     ),
+    BinarySensorEntityDescription(
+        key="Enable user",
+        name="Enable user",
+        device_class=BinarySensorDeviceClass.POWER,
+    ),
     # optional
     BinarySensorEntityDescription(
         key="Plug_charging_station",

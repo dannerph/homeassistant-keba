@@ -126,8 +126,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Set failsafe mode at start up of Home Assistant if configured in options
     await _async_set_failsafe(hass, entry)
 
-    # # Add update listener for config entry changes (options)
-    # entry.async_on_unload(entry.add_update_listener(update_listener))
+    # Add update listener for config entry changes (options)
+    entry.async_on_unload(entry.add_update_listener(update_listener))
 
     # Register services to hass
     async def execute_service(call: ServiceCall) -> None:
@@ -214,10 +214,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
-# async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
-#     """Handle options update."""
-#     await hass.config_entries.async_reload(config_entry.entry_id)
-#     print("test")
+async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
+    """Handle options update."""
+    await hass.config_entries.async_reload(config_entry.entry_id)
 
 
 async def get_keba_connection(hass: HomeAssistant) -> KebaKeContact:
