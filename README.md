@@ -7,3 +7,9 @@ This custom component integrates Keba charging stations into Home Assistant. The
 ## Installation
 
 Copy content of custom_components to your local custom_components folder and add it via config flow.
+
+## Support Development
+
+### Paypal
+
+[![](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=848P2G8EA68PJ)
