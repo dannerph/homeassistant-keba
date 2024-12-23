@@ -1,6 +1,6 @@
 """Number entities for keba."""
 
-from keba_kecontact.chargingstation import ChargingStation
+from keba_kecontact.charging_station import ChargingStation
 from keba_kecontact.connection import KebaKeContact
 
 from homeassistant.components.number import NumberEntity, NumberEntityDescription
@@ -55,4 +55,4 @@ class KebaNumber(KebaBaseEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set a new value."""
-        await self._charging_station.set_current(current=value, delay=1)
+        await self._charging_station.set_current_max_permanent(current=value)

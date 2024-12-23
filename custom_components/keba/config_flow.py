@@ -1,11 +1,12 @@
 """Config flow for keba integration."""
+
 from __future__ import annotations
 
 from ipaddress import ip_network
 import logging
 from typing import Any
 
-from keba_kecontact.connection import SetupError
+from keba_kecontact.utils import SetupError
 import voluptuous as vol
 
 from homeassistant import config_entries, core, exceptions

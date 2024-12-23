@@ -1,10 +1,9 @@
 """Support for Keba notifications."""
-from __future__ import annotations
 
 import logging
 from typing import Any, cast
 
-from keba_kecontact.chargingstation import ChargingStation, KebaService
+from keba_kecontact.charging_station import ChargingStation, KebaService
 
 from homeassistant.components.notify import (
     ATTR_DATA,
@@ -17,22 +16,6 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from . import DOMAIN, KEBA_CONNECTION
 
 _LOGGER = logging.getLogger(__name__)
-
-
-async def async_get_service(
-    hass: HomeAssistant,
-    config: ConfigType,
-    discovery_info: DiscoveryInfoType | None = None,
-) -> KebaNotificationService:
-    """Return the notify service."""
-
-    keba = hass.data[DOMAIN][KEBA_CONNECTION]
-    targets = {
-        w.device_info.model: w
-        for w in keba.get_charging_stations()
-        if KebaService.DISPLAY in w.device_info.available_services()
-    }
-    return KebaNotificationService(targets)
 
 
 class KebaNotificationService(BaseNotificationService):
@@ -69,3 +52,19 @@ class KebaNotificationService(BaseNotificationService):
             max_time = float(data.get("max_time", 10))
 
             await charging_station.display(message, min_time, max_time)
+
+
+async def async_get_service(
+    hass: HomeAssistant,
+    config: ConfigType,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> KebaNotificationService:
+    """Return the notify service."""
+
+    keba = hass.data[DOMAIN][KEBA_CONNECTION]
+    targets = {
+        w.device_info.model: w
+        for w in keba.get_charging_stations()
+        if KebaService.DISPLAY in w.device_info.available_services()
+    }
+    return KebaNotificationService(targets)

@@ -1,10 +1,10 @@
 """Support for KEBA charging stations."""
-from __future__ import annotations
 
 import logging
 
-from keba_kecontact.chargingstation import ChargingStation, KebaService
-from keba_kecontact.connection import KebaKeContact, SetupError, create_keba_connection
+from keba_kecontact import create_keba_connection
+from keba_kecontact.charging_station import ChargingStation, KebaService
+from keba_kecontact.connection import KebaKeContact, SetupError
 
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import (
@@ -16,7 +16,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import device_registry, discovery
+from homeassistant.helpers import device_registry as dr, discovery
 from homeassistant.helpers.entity import DeviceInfo, Entity, EntityDescription
 from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 from homeassistant.helpers.typing import ConfigType
@@ -89,7 +89,7 @@ def _get_charging_station(
     hass: HomeAssistant, device_id: str
 ) -> ChargingStation | None:
     # Get and check home assistant device linked to device_id
-    device = device_registry.async_get(hass).async_get(device_id)
+    device = dr.async_get(hass).async_get(device_id)
     if not device:
         _LOGGER.error("Could not find a device for id: %s", device_id)
         return None
@@ -155,8 +155,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 and entry.options[CONF_RFID_CLASS] != ""
             ):
                 additional_args[CONF_RFID_CLASS] = entry.options[CONF_RFID_CLASS]
-
-        await function_call(**call.data, **additional_args)
+        parameters = call.data.copy()
+        parameters.pop(CONF_DEVICE_ID)
+        await function_call(**parameters, **additional_args)
 
     for service in charging_station.device_info.available_services():
         if service != KebaService.DISPLAY:

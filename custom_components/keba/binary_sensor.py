@@ -1,10 +1,9 @@
 """Support for KEBA charging station binary sensors."""
-from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
 
-from keba_kecontact.chargingstation import ChargingStation
+from keba_kecontact.charging_station import ChargingStation
 from keba_kecontact.connection import KebaKeContact
 
 from homeassistant.components.binary_sensor import (

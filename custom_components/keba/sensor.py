@@ -1,10 +1,9 @@
 """Support for KEBA charging station sensors."""
-from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
 
-from keba_kecontact.chargingstation import ChargingStation
+from keba_kecontact.charging_station import ChargingStation
 from keba_kecontact.connection import KebaKeContact
 
 from homeassistant.components.sensor import (
@@ -66,6 +65,12 @@ SENSOR_TYPES = [
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
     # optional
+    SensorEntityDescription(
+        key="RFID tag",
+        name="RFID tag",
+        icon="mdi:card-account-details-outline",
+        entity_registry_enabled_default=False,
+    ),
     SensorEntityDescription(
         key="RFID class",
         name="RFID class",
@@ -131,7 +136,6 @@ SENSOR_TYPES = [
         key="Max curr %",
         name="Maximum current % (system)",
         native_unit_of_measurement=PERCENTAGE,
-        device_class=SensorDeviceClass.CURRENT,
         entity_registry_enabled_default=False,
     ),
     SensorEntityDescription(
