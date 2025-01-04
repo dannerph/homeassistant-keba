@@ -6,26 +6,24 @@ from ipaddress import ip_network
 import logging
 from typing import Any
 
-from keba_kecontact.utils import SetupError
+from keba_kecontact.connection import SetupError
 import voluptuous as vol
 
-from homeassistant import config_entries, core, exceptions
+from homeassistant import core, exceptions
 from homeassistant.components import network
+from homeassistant.config_entries import (
+    CONN_CLASS_LOCAL_POLL,
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import CONF_HOST
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
 
 from . import get_keba_connection
-from .const import (
-    CONF_FS,
-    CONF_FS_FALLBACK,
-    CONF_FS_PERSIST,
-    CONF_FS_TIMEOUT,
-    CONF_RFID,
-    CONF_RFID_CLASS,
-    DOMAIN,
-)
+from .const import CONF_RFID, CONF_RFID_CLASS, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,23 +48,23 @@ async def validate_input(
     return {"title": device_info.model, "unique_id": device_info.device_id}
 
 
-class KebaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class KebaConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for keba charging station."""
 
     VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
+    CONNECTION_CLASS = CONN_CLASS_LOCAL_POLL
 
     def __init__(self) -> None:
         """Initialize the Keba flow."""
         self._discovered_devices: list[str] = []
 
-    async def async_step_import(self, import_data) -> FlowResult:
+    async def async_step_import(self, import_data) -> ConfigFlowResult:
         """Import keba config from configuration.yaml."""
         return await self.async_step_connect(import_data)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle the initial step."""
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -106,7 +104,7 @@ class KebaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_select(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle multiple charging stations found."""
         if user_input is not None:
             return await self.async_step_connect(user_input)
@@ -119,7 +117,7 @@ class KebaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_connect(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Connect to the keba charging station."""
         errors: dict[str, str] = {}
         info = None
@@ -145,23 +143,23 @@ class KebaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
+        config_entry: ConfigEntry,
     ) -> KebaOptionsFlow:
         """Return a Keba options flow."""
         return KebaOptionsFlow(config_entry)
 
 
-class KebaOptionsFlow(config_entries.OptionsFlow):
+class KebaOptionsFlow(OptionsFlow):
     """Handle a option flow for keba charging station."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+    def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize keba charging station option flow."""
         self.config_entry = config_entry
         self.options = dict(config_entry.options)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle the initial step."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
@@ -169,22 +167,6 @@ class KebaOptionsFlow(config_entries.OptionsFlow):
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        CONF_FS,
-                        default=self.config_entry.options.get(CONF_FS, False),
-                    ): bool,
-                    vol.Required(
-                        CONF_FS_PERSIST,
-                        default=self.config_entry.options.get(CONF_FS_PERSIST, False),
-                    ): bool,
-                    vol.Required(
-                        CONF_FS_TIMEOUT,
-                        default=self.config_entry.options.get(CONF_FS_TIMEOUT, 30),
-                    ): vol.All(int, vol.Range(min=10, max=600)),
-                    vol.Required(
-                        CONF_FS_FALLBACK,
-                        default=self.config_entry.options.get(CONF_FS_FALLBACK, 6),
-                    ): vol.All(int, vol.Range(min=6, max=63)),
                     vol.Optional(
                         CONF_RFID,
                         default=self.config_entry.options.get(CONF_RFID, ""),

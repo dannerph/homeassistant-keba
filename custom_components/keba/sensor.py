@@ -26,8 +26,8 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import KebaBaseEntity
 from .const import DOMAIN, KEBA_CONNECTION
+from .entity import KebaBaseEntity
 
 SENSOR_TYPES = [
     # default
@@ -52,7 +52,7 @@ SENSOR_TYPES = [
         device_class=SensorDeviceClass.ENERGY,
     ),
     SensorEntityDescription(
-        key="E pres",
+        key="E pres",  # codespell:ignore pres
         name="Session energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
@@ -241,6 +241,12 @@ SENSOR_TYPES = [
         name="Uptime",
         entity_registry_enabled_default=False,
         native_unit_of_measurement=UnitOfTime.SECONDS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="X2 phaseSwitch source",
+        name="X2 phaseSwitch source",
+        entity_registry_enabled_default=False,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
 ]

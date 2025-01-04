@@ -16,8 +16,8 @@ from homeassistant.const import CONF_HOST, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import KebaBaseEntity
 from .const import DOMAIN, KEBA_CONNECTION
+from .entity import KebaBaseEntity
 
 SENSOR_TYPES = [
     # default
@@ -63,6 +63,12 @@ SENSOR_TYPES = [
     BinarySensorEntityDescription(
         key="AuthON",
         name="AuthON",
+        entity_registry_enabled_default=False,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    BinarySensorEntityDescription(
+        key="X2 phaseSwitch",
+        name="X2 Phase Switch",
         entity_registry_enabled_default=False,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),

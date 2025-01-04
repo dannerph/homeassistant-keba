@@ -13,11 +13,11 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import KebaBaseEntity
 from .const import DOMAIN, KEBA_CONNECTION
+from .entity import KebaBaseEntity
 
 
-@dataclass
+@dataclass(frozen=True)
 class KebaButtonEntityDescription(ButtonEntityDescription):
     """Class describing Keba button entities."""
 

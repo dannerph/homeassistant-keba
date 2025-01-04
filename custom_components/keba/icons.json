@@ -1,0 +1,31 @@
+{
+  "services": {
+    "start": {
+      "service": "mdi:lock"
+    },
+    "stop": {
+      "service": "mdi:lock-open"
+    },
+    "set_energy": {
+      "service": "mdi:flash"
+    },
+    "set_current": {
+      "service": "mdi:flash"
+    },
+    "set_charging_power": {
+      "service": "mdi:flash"
+    },
+    "set_output": {
+      "service": "mdi:export:"
+    },
+    "x2src": {
+      "service": "mdi:export"
+    },
+    "x2": {
+      "service": "mdi:export"
+    },
+    "set_failsafe": {
+      "service": "mdi:message-alert"
+    }
+  }
+}

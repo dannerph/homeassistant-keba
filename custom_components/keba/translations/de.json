@@ -21,10 +21,6 @@
     "step": {
       "init": {
         "data": {
-          "failsafe": "Failsafe mode",
-          "failsafe_timeout": "Failsafe timeout (in Sekunden)",
-          "failsafe_fallback": "Failsafe fallback current (in Ampere)",
-          "failsafe_persist": "Failsafe persistieren",
           "rfid": "RFID tag für default Authentication (Optional)",
           "rfid_class": "RFID class für default Authentication (Farbcode, optional)"
         }
@@ -35,6 +31,162 @@
     "deprecated_yaml": {
       "description": "Ihre bestehende YAML-Konfiguration wurde automatisch in die Benutzeroberfläche importiert.\n\nEntfernen Sie die keba YAML-Konfiguration aus Ihrer configuration.yaml-Datei und starten Sie Home Assistant neu, um dieses Problem zu beheben.\n\nAufgrund interner Umstrukturierungen müssen Sie möglicherweise Automationen, Skripte und Ihr Dashboard aktualisieren.",
       "title": "Die YAML-Konfiguration von Keba wird nicht mehr verwendet."
+    }
+  },
+  "services": {
+    "start": {
+      "name": "Ladeprozess authorisieren",
+      "description": "Authorizes a charging process with the given RFID tag.",
+      "fields": {
+        "device_id": {
+          "name": "Ladestation",
+          "description": "Die Keba Ladestation auf der der Dienst ausgeführt wird."
+        },
+        "rfid": {
+          "name": "RFID Tag",
+          "description": "The RFID tag to authorize the charging process (must be configured in the Ladestation first)."
+        },
+        "rfid_class": {
+          "name": "RFID Class",
+          "description": "RFID class to be used (RFID color code)"
+        }
+      }
+    },
+    "stop": {
+      "name": "Ladeprozess deautorisieren",
+      "description": "Deauthorizes the running charging process with the given RFID tag.",
+      "fields": {
+        "device_id": {
+          "name": "Ladestation",
+          "description": "Die Keba Ladestation auf der der Dienst ausgeführt wird."
+        },
+        "rfid": {
+          "name": "RFID Tag",
+          "description": "The RFID tag to authorize the charging process (must be configured in the Ladestation first)."
+        }
+      }
+    },
+    "set_energy": {
+      "name": "Energielimit setzen",
+      "description": "Sets the energy target after which the charging process stops.",
+      "fields": {
+        "device_id": {
+          "name": "Ladestation",
+          "description": "Die Keba Ladestation auf der der Dienst ausgeführt wird."
+        },
+        "energy": {
+          "name": "Energy Limit",
+          "description": "The energy target to stop charging in kWh. Setting 0 disables the limit."
+        }
+      }
+    },
+    "set_current": {
+      "name": "Stromlimit setzen",
+      "description": "Sets the maximum current for charging processes.",
+      "fields": {
+        "device_id": {
+          "name": "Ladestation",
+          "description": "Die Keba Ladestation auf der der Dienst ausgeführt wird."
+        },
+        "current": {
+          "name": "Current Limit",
+          "description": "The maximum current used for the charging process. The value is limited by the DIP-switch settings and the used cable of the Ladestation."
+        },
+        "delay": {
+          "name": "Delay",
+          "description": "The delay in seconds after which the defined current should be set."
+        }
+      }
+    },
+    "set_failsafe": {
+      "name": "Failsafe Modus setzen",
+      "description": "Set the failsafe mode of the Ladestation. If all parameters are 0, the failsafe mode will be disabled.",
+      "fields": {
+        "device_id": {
+          "name": "Ladestation",
+          "description": "Die Keba Ladestation auf der der Dienst ausgeführt wird."
+        },
+        "mode": {
+          "name": "Failsafe mode",
+          "description": "Failsafe on or off."
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "Timeout after which the failsafe mode is triggered, if set_current was not executed during this time."
+        },
+        "fallback_value": {
+          "name": "Fallback value",
+          "description": "Fallback current to be set after timeout."
+        },
+        "persist": {
+          "name": "Persist",
+          "description": "If failsafe_persist is False, the failsafe option is only used until Ladestation reboot. If failsafe_persist is True, the failsafe option will survive a reboot."
+        }
+      }
+    },
+    "set_charging_power": {
+      "name": "Ladeleistung setzen",
+      "description": "Set the charging power in kW if a charging operation is running. This service internally identifies the number of phases used for charging and sets the charging charging current to match the charging power as good as possible.",
+      "fields": {
+        "device_id": {
+          "name": "Ladestation",
+          "description": "Die Keba Ladestation auf der der Dienst ausgeführt wird."
+        },
+        "power": {
+          "name": "Charging Power",
+          "description": "Target charging power in kW."
+        },
+        "round_up": {
+          "name": "Round up charging power",
+          "description": "The Ladestation only supports to set current on all three phases. When round_up is enabled, the charging current will round up so that at least the given charging power is reached. Otherwise it is rounded down, so that less than the given charging power is reached."
+        },
+        "stop_below_6_ampere": {
+          "name": "Stop charging below 6A",
+          "description": "If enabled, the charging process will stop if given charging power is too small. Otherwise, charging will continue with 6 A per phase."
+        }
+      }
+    },
+    "set_output": {
+      "name": "Output setzen",
+      "description": "Output opens and closes the relay terminal X2. X2 is located in the connection panel of the Ladestation. The reply TCH-OK confirms only the receiving of the command and not the correctness of the value. Values between 2 and 9 are not being replied to (reserved functions). Invalid values (e.g. letters) are leading to a deactivation of the relay. The correct reception can be verified in the Output sensor. This command needs DSW1.2 to be set to OFF.",
+      "fields": {
+        "device_id": {
+          "name": "Ladestation",
+          "description": "Die Keba Ladestation auf der der Dienst ausgeführt wird."
+        },
+        "out": {
+          "name": "Output value on X2",
+          "description": "0 is open, 1 is close, 2-9 not allowed (reserved functions), >= 10 Pulse output with the specified number of pulses (pulses / kWh) and is stored in the EEPROM; reasonably usable up to 150."
+        }
+      }
+    },
+    "x2src": {
+      "name": "X2 Quelle konfigurieren",
+      "description": "Sets the X2 swtich source which specifies the communication channel used for toggle the contact x2",
+      "fields": {
+        "device_id": {
+          "name": "Ladestation",
+          "description": "Die Keba Ladestation auf der der Dienst ausgeführt wird."
+        },
+        "source": {
+          "name": "Communication channel",
+          "description": "Source for X2 output switching. 0 No phase toggle source is available, 1 Toggle via OCPP, 2 Direct toggle command via RESTAPI, 3 Toggle via Modbus, 4 Toggle via UDP."
+        }
+      }
+    },
+    "x2": {
+      "name": "X2 Phasenschalter setzen",
+      "description": "Sets th external phase switch via contact x2. When switching between the parameters, a cool down time of 5 minutes is required.",
+      "fields": {
+        "device_id": {
+          "name": "Ladestation",
+          "description": "Die Keba Ladestation auf der der Dienst ausgeführt wird."
+        },
+        "three_phases": {
+          "name": "Three phases",
+          "description": "True for using all three phases, False for using only one phase."
+        }
+      }
     }
   }
 }

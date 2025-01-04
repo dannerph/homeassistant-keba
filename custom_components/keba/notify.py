@@ -1,70 +1,57 @@
 """Support for Keba notifications."""
 
-import logging
-from typing import Any, cast
+from keba_kecontact.charging_station import ChargingStation
 
-from keba_kecontact.charging_station import ChargingStation, KebaService
-
-from homeassistant.components.notify import (
-    ATTR_DATA,
-    ATTR_TARGET,
-    BaseNotificationService,
-)
+from homeassistant.components.notify import NotifyEntity, NotifyEntityDescription
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import DOMAIN, KEBA_CONNECTION
-
-_LOGGER = logging.getLogger(__name__)
-
-
-class KebaNotificationService(BaseNotificationService):
-    """Notification service for KEBA EV Chargers."""
-
-    charging_station_targets: dict[str, ChargingStation] = {}
-
-    def __init__(self, targets: dict[str, ChargingStation]) -> None:
-        """Initialize the service."""
-        self.charging_station_targets = targets
-
-    @property
-    def targets(self) -> dict[str, Any] | None:
-        """Return a dictionary of registered targets."""
-        return self.charging_station_targets
-
-    async def async_send_message(self, message: str = "", **kwargs: Any) -> None:
-        """Send the message."""
-        for charging_station in kwargs[ATTR_TARGET]:
-            charging_station = cast(ChargingStation, charging_station)
-
-            i = charging_station.device_info
-            _LOGGER.debug(
-                "Sending message '%s' to %s %s (Serial: %s)",
-                message,
-                i.manufacturer,
-                i.model,
-                i.device_id,
-            )
-
-            # Extract params from data dict
-            data = kwargs[ATTR_DATA] or {}
-            min_time = float(data.get("min_time", 2))
-            max_time = float(data.get("max_time", 10))
-
-            await charging_station.display(message, min_time, max_time)
+from .entity import KebaBaseEntity
 
 
-async def async_get_service(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
-    discovery_info: DiscoveryInfoType | None = None,
-) -> KebaNotificationService:
-    """Return the notify service."""
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up the keba entity platform."""
 
     keba = hass.data[DOMAIN][KEBA_CONNECTION]
-    targets = {
-        w.device_info.model: w
-        for w in keba.get_charging_stations()
-        if KebaService.DISPLAY in w.device_info.available_services()
-    }
-    return KebaNotificationService(targets)
+    charging_station = keba.get_charging_station(config_entry.data[CONF_HOST])
+    async_add_entities(
+        [
+            KebaNotifyEntity(
+                charging_station,
+                NotifyEntityDescription(
+                    key="display",
+                    name="Display",
+                    device_class="display",
+                ),
+            )
+        ]
+    )
+
+
+class KebaNotifyEntity(KebaBaseEntity, NotifyEntity):
+    """Implement keba notification platform."""
+
+    def __init__(
+        self,
+        charging_station: ChargingStation,
+        description: NotifyEntityDescription,
+    ) -> None:
+        """Initialize the KEBA Sensor."""
+        super().__init__(charging_station, description)
+
+    async def async_send_message(self, message: str, title: str | None = None) -> None:
+        """Send the message."""
+        try:
+            await self._charging_station.display(message)
+        except NotImplementedError as ex:
+            raise ServiceValidationError(
+                "Display is not available on selected charging station"
+            ) from ex

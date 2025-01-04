@@ -11,8 +11,8 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import KebaBaseEntity
 from .const import CONF_RFID, CONF_RFID_CLASS, DOMAIN, KEBA_CONNECTION
+from .entity import KebaBaseEntity
 
 
 async def async_setup_entry(

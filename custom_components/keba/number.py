@@ -9,8 +9,8 @@ from homeassistant.const import CONF_HOST, UnitOfElectricCurrent
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import KebaBaseEntity
 from .const import DOMAIN, KEBA_CONNECTION
+from .entity import KebaBaseEntity
 
 
 async def async_setup_entry(

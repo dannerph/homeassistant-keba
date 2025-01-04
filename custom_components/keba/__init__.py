@@ -5,29 +5,19 @@ import logging
 from keba_kecontact import create_keba_connection
 from keba_kecontact.charging_station import ChargingStation, KebaService
 from keba_kecontact.connection import KebaKeContact, SetupError
+import voluptuous as vol
 
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.const import (
-    CONF_DEVICE_ID,
-    CONF_ENTITY_ID,
-    CONF_HOST,
-    CONF_NAME,
-    Platform,
-)
+from homeassistant.const import CONF_DEVICE_ID, CONF_HOST, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import device_registry as dr, discovery
-from homeassistant.helpers.entity import DeviceInfo, Entity, EntityDescription
+from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
+from homeassistant.helpers import device_registry as dr
+import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.util import slugify
 
 from .const import (
     CHARGING_STATIONS,
-    CONF_FS,
-    CONF_FS_FALLBACK,
-    CONF_FS_PERSIST,
-    CONF_FS_TIMEOUT,
     CONF_RFID,
     CONF_RFID_CLASS,
     DATA_HASS_CONFIG,
@@ -39,12 +29,23 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,
-    Platform.LOCK,
     Platform.BUTTON,
+    Platform.LOCK,
     Platform.NOTIFY,
-    Platform.SENSOR,
     Platform.NUMBER,
+    Platform.SENSOR,
 ]
+CONFIG_SCHEMA = vol.Schema(
+    {
+        DOMAIN: vol.Schema(
+            {
+                vol.Required(CONF_HOST): cv.string,
+                vol.Optional(CONF_RFID, default="00845500"): cv.string,
+            }
+        )
+    },
+    extra=vol.ALLOW_EXTRA,
+)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -69,22 +70,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def _async_set_failsafe(hass: HomeAssistant, entry: ConfigEntry):
-    if CONF_FS in entry.options:
-        charging_station = hass.data[DOMAIN][CHARGING_STATIONS][entry.entry_id]
-        try:
-            hass.loop.create_task(
-                charging_station.set_failsafe(
-                    entry.options[CONF_FS],
-                    entry.options[CONF_FS_TIMEOUT],
-                    entry.options[CONF_FS_FALLBACK],
-                    entry.options[CONF_FS_PERSIST],
-                )
-            )
-        except ValueError as ex:
-            _LOGGER.warning("Could not set failsafe mode %s", ex)
-
-
 def _get_charging_station(
     hass: HomeAssistant, device_id: str
 ) -> ChargingStation | None:
@@ -94,7 +79,7 @@ def _get_charging_station(
         _LOGGER.error("Could not find a device for id: %s", device_id)
         return None
 
-    # Get and check config_entry of givne home assistant device
+    # Get and check config_entry of given home assistant device
     config_entry = hass.config_entries.async_get_entry(
         next(iter(device.config_entries))
     )
@@ -122,9 +107,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(f"{entry.data[CONF_HOST]} not reachable") from exc
 
     hass.data[DOMAIN][CHARGING_STATIONS][entry.entry_id] = charging_station
-
-    # Set failsafe mode at start up of Home Assistant if configured in options
-    await _async_set_failsafe(hass, entry)
 
     # Add update listener for config entry changes (options)
     entry.async_on_unload(entry.add_update_listener(update_listener))
@@ -157,28 +139,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 additional_args[CONF_RFID_CLASS] = entry.options[CONF_RFID_CLASS]
         parameters = call.data.copy()
         parameters.pop(CONF_DEVICE_ID)
-        await function_call(**parameters, **additional_args)
+        try:
+            await function_call(**parameters, **additional_args)
+        except NotImplementedError as ex:
+            raise ServiceValidationError(
+                "Service is not available on this charging station"
+            ) from ex
 
     for service in charging_station.device_info.available_services():
         if service != KebaService.DISPLAY:
             hass.services.async_register(DOMAIN, service.value, execute_service)
-        else:
-            # set up notify platform, no entry support for notify platform yet,
-            # have to use discovery to load platform.
-            hass.async_create_task(
-                discovery.async_load_platform(
-                    hass,
-                    Platform.NOTIFY,
-                    DOMAIN,
-                    {CONF_NAME: DOMAIN, CONF_ENTITY_ID: entry.entry_id},
-                    hass.data[DOMAIN][DATA_HASS_CONFIG],
-                )
-            )
 
-    # Set up all platforms except notify
-    await hass.config_entries.async_forward_entry_setups(
-        entry, [platform for platform in PLATFORMS if platform != Platform.NOTIFY]
-    )
+    # Set up all platforms
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
 
@@ -187,26 +160,21 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     keba = hass.data[DOMAIN][KEBA_CONNECTION]
 
-    unload_ok = await hass.config_entries.async_unload_platforms(
-        entry, [platform for platform in PLATFORMS if platform != Platform.NOTIFY]
-    )
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     # Remove notify
     charging_station = keba.get_charging_station(entry.data[CONF_HOST])
-    if KebaService.DISPLAY in charging_station.device_info.available_services():
-        hass.services.async_remove(
-            Platform.NOTIFY, f"{DOMAIN}_{slugify(charging_station.device_info.model)}"
-        )
+    # if KebaService.DISPLAY in charging_station.device_info.available_services():
+    #     hass.services.async_remove(
+    #         Platform.NOTIFY, f"{DOMAIN}_{slugify(charging_station.device_info.model)}"
+    #     )
 
     # Only remove services if it is the last charging station
     if len(hass.data[DOMAIN][CHARGING_STATIONS]) == 1:
-        _LOGGER.debug("Removing last charging station, cleanup services and notify")
+        _LOGGER.debug("Removing last charging station, cleanup services")
 
         for service in charging_station.device_info.available_services():
-            if service == KebaService.DISPLAY:
-                hass.services.async_remove(Platform.NOTIFY, DOMAIN)
-            else:
-                hass.services.async_remove(DOMAIN, service.value)
+            hass.services.async_remove(DOMAIN, service.value)
 
     if unload_ok:
         keba.remove_charging_station(entry.data[CONF_HOST])
@@ -229,43 +197,3 @@ async def get_keba_connection(hass: HomeAssistant) -> KebaKeContact:
         hass.data[DOMAIN][KEBA_CONNECTION] = await create_keba_connection(hass.loop)
 
     return hass.data[DOMAIN][KEBA_CONNECTION]
-
-
-class KebaBaseEntity(Entity):
-    """Common base for Keba charging station entities."""
-
-    _attr_should_poll = False
-
-    def __init__(
-        self,
-        charging_station: ChargingStation,
-        description: EntityDescription,
-    ) -> None:
-        """Initialize sensor."""
-        self._charging_station = charging_station
-        self.entity_description = description
-
-        wb_info = self._charging_station.device_info
-
-        self._attr_name = f"{wb_info.manufacturer} {wb_info.model} {description.name}"
-        self._attr_unique_id = f"{DOMAIN}-{wb_info.device_id}-{description.key}"
-
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, wb_info.device_id)},
-            manufacturer=wb_info.manufacturer,
-            model=wb_info.model,
-            name=f"{wb_info.manufacturer} {wb_info.model}",
-            sw_version=wb_info.sw_version,
-            configuration_url=wb_info.webconfigurl,
-        )
-
-    def update_callback(self, *args) -> None:
-        """Schedule a state update."""
-        self.schedule_update_ha_state(True)
-
-    async def async_added_to_hass(self) -> None:
-        """Add callback after being added to hass.
-
-        Show latest data after startup.
-        """
-        self._charging_station.add_callback(self.update_callback)
