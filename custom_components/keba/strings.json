@@ -111,7 +111,7 @@
         },
         "timeout": {
           "name": "Timeout",
-          "description": "Timeout after which the failsafe mode is triggered, if set_current was not executed during this time."
+          "description": "Timeout after which the failsafe mode is triggered if the 'Set current' action was not run during this time."
         },
         "fallback_value": {
           "name": "Fallback value",
@@ -119,7 +119,7 @@
         },
         "persist": {
           "name": "Persist",
-          "description": "If failsafe_persist is False, the failsafe option is only used until charging station reboot. If failsafe_persist is True, the failsafe option will survive a reboot."
+          "description": "If set to 0, the failsafe option will be disabled after a charging station reboot. If set to 1, the failsafe option will survive a reboot."
         }
       }
     },
