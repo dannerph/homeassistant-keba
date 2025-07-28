@@ -51,7 +51,7 @@ SENSOR_TYPES = [
     BinarySensorEntityDescription(
         key="Plug_locked",
         name="Cable locked",
-        device_class=BinarySensorDeviceClass.PLUG,
+        device_class=BinarySensorDeviceClass.LOCK,
         entity_registry_enabled_default=False,
     ),
     BinarySensorEntityDescription(
