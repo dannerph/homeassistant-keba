@@ -81,7 +81,7 @@ def _get_charging_station(
 
     # Get and check config_entry of given home assistant device
     config_entry = hass.config_entries.async_get_entry(
-        next(iter(device.config_entries))
+        device.primary_config_entry or next(iter(device.config_entries))
     )
     if config_entry is None:
         _LOGGER.fatal("Config entry for device %s not valid", str(device))
