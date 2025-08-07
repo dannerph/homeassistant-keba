@@ -55,3 +55,11 @@ async def test_config_flow_errors(hass: HomeAssistant, mock_keba: AsyncMock) -> 
 
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "cannot_connect"}
+
+    mock_keba.get_device_info.side_effect = None
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
