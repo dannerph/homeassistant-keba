@@ -27,7 +27,7 @@ class KebaBaseEntity(Entity):
 
         cs_info = self._charging_station.device_info
 
-        self._attr_name = f"{cs_info.manufacturer} {cs_info.model} {description.name}"
+        self._attr_name = f"{description.name}"
         self._attr_unique_id = f"{DOMAIN}-{cs_info.device_id}-{description.key}"
 
         self._attr_device_info = DeviceInfo(
