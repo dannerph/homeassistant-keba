@@ -1,191 +1,191 @@
 {
-    "config": {
-        "abort": {
-            "already_configured": "Charging station already configured."
-        },
-        "error": {
-            "cannot_connect": "Could not connect to the charging station.",
-            "no_device_found": "No device was found in your network.",
-            "unknown": "Unkown error occured. Please check the logs."
-        },
-        "step": {
-            "user": {
-                "data": {
-                    "host": "Host (IP Address)"
-                }
-            }
-        }
+  "config": {
+    "abort": {
+      "already_configured": "Charging station already configured."
     },
-    "issues": {
-        "deprecated_yaml": {
-            "description": "Your existing YAML configuration has been imported into the UI automatically.\n\nRemove the keba YAML configuration from your configuration.yaml file and restart Home Assistant to fix this issue.\n\nDue to internal restructuring, you may need to update automations, scripts and your dashboard.",
-            "title": "YAML configuring of Keba is no longer used."
-        }
+    "error": {
+      "cannot_connect": "Could not connect to the charging station.",
+      "no_device_found": "No device was found in your network.",
+      "unknown": "Unkown error occured. Please check the logs."
     },
-    "options": {
-        "step": {
-            "init": {
-                "data": {
-                    "rfid": "RFID tag for default authentication (Optional)",
-                    "rfid_class": "RFID class for default authentication (color code, optional)"
-                }
-            }
+    "step": {
+      "user": {
+        "data": {
+          "host": "Host (IP Address)"
         }
-    },
-    "services": {
-        "set_charging_power": {
-            "description": "Set the charging power in kW if a charging operation is running. This service internally identifies the number of phases used for charging and sets the charging charging current to match the charging power as good as possible.",
-            "fields": {
-                "device_id": {
-                    "description": "The Keba Charging Station to run the service on.",
-                    "name": "Charging Station"
-                },
-                "power": {
-                    "description": "Target charging power in kW.",
-                    "name": "Charging Power"
-                },
-                "round_up": {
-                    "description": "The charging station only supports to set current on all three phases. When round_up is enabled, the charging current will round up so that at least the given charging power is reached. Otherwise it is rounded down, so that less than the given charging power is reached.",
-                    "name": "Round up charging power"
-                },
-                "stop_below_6_ampere": {
-                    "description": "If enabled, the charging process will stop if given charging power is too small. Otherwise, charging will continue with 6 A per phase.",
-                    "name": "Stop charging below 6A"
-                }
-            },
-            "name": "Set charging power"
-        },
-        "set_current": {
-            "description": "Sets the maximum current for charging processes.",
-            "fields": {
-                "current": {
-                    "description": "The maximum current used for the charging process. The value is limited by the DIP-switch settings and the used cable of the charging station.",
-                    "name": "Current Limit"
-                },
-                "delay": {
-                    "description": "The delay in seconds after which the defined current should be set.",
-                    "name": "Delay"
-                },
-                "device_id": {
-                    "description": "The Keba Charging Station to run the service on.",
-                    "name": "Charging Station"
-                }
-            },
-            "name": "Set current limit"
-        },
-        "set_energy": {
-            "description": "Sets the energy target after which the charging process stops.",
-            "fields": {
-                "device_id": {
-                    "description": "The Keba Charging Station to run the service on.",
-                    "name": "Charging Station"
-                },
-                "energy": {
-                    "description": "The energy target to stop charging in kWh. Setting 0 disables the limit.",
-                    "name": "Energy Limit"
-                }
-            },
-            "name": "Set energy limit"
-        },
-        "set_failsafe": {
-            "description": "Set the failsafe mode of the charging station. If all parameters are 0, the failsafe mode will be disabled.",
-            "fields": {
-                "device_id": {
-                    "description": "The Keba Charging Station to run the service on.",
-                    "name": "Charging Station"
-                },
-                "fallback_value": {
-                    "description": "Fallback current to be set after timeout.",
-                    "name": "Fallback value"
-                },
-                "mode": {
-                    "description": "Failsafe on or off.",
-                    "name": "Failsafe mode"
-                },
-                "persist": {
-                    "description": "If failsafe_persist is False, the failsafe option is only used until charging station reboot. If failsafe_persist is True, the failsafe option will survive a reboot.",
-                    "name": "Persist"
-                },
-                "timeout": {
-                    "description": "Timeout after which the failsafe mode is triggered, if set_current was not executed during this time.",
-                    "name": "Timeout"
-                }
-            },
-            "name": "Set failsafe"
-        },
-        "set_output": {
-            "description": "Output opens and closes the relay terminal X2. X2 is located in the connection panel of the charging station. The reply TCH-OK confirms only the receiving of the command and not the correctness of the value. Values between 2 and 9 are not being replied to (reserved functions). Invalid values (e.g. letters) are leading to a deactivation of the relay. The correct reception can be verified in the Output sensor. This command needs DSW1.2 to be set to OFF.",
-            "fields": {
-                "device_id": {
-                    "description": "The Keba Charging Station to run the service on.",
-                    "name": "Charging Station"
-                },
-                "out": {
-                    "description": "0 is open, 1 is close, 2-9 not allowed (reserved functions), >= 10 Pulse output with the specified number of pulses (pulses / kWh) and is stored in the EEPROM; reasonably usable up to 150.",
-                    "name": "Output value on X2"
-                }
-            },
-            "name": "Set output"
-        },
-        "start": {
-            "description": "Authorizes a charging process with the given RFID tag.",
-            "fields": {
-                "device_id": {
-                    "description": "The Keba Charging Station to run the service on.",
-                    "name": "Charging Station"
-                },
-                "rfid": {
-                    "description": "The RFID tag to authorize the charging process (must be configured in the charging station first).",
-                    "name": "RFID Tag"
-                },
-                "rfid_class": {
-                    "description": "RFID class to be used (RFID color code)",
-                    "name": "RFID Class"
-                }
-            },
-            "name": "Authorize charging process"
-        },
-        "stop": {
-            "description": "Deauthorizes the running charging process with the given RFID tag.",
-            "fields": {
-                "device_id": {
-                    "description": "The Keba Charging Station to run the service on.",
-                    "name": "Charging Station"
-                },
-                "rfid": {
-                    "description": "The RFID tag to authorize the charging process (must be configured in the charging station first).",
-                    "name": "RFID Tag"
-                }
-            },
-            "name": "Deauthorize charging process"
-        },
-        "x2": {
-            "description": "Sets th external phase switch via contact x2. When switching between the parameters, a cool down time of 5 minutes is required.",
-            "fields": {
-                "device_id": {
-                    "description": "The Keba Charging Station to run the service on.",
-                    "name": "Charging Station"
-                },
-                "three_phases": {
-                    "description": "True for using all three phases, False for using only one phase.",
-                    "name": "Three phases"
-                }
-            },
-            "name": "X2 Phase switch"
-        },
-        "x2src": {
-            "description": "Sets the X2 swtich source which specifies the communication channel used for toggle the contact x2",
-            "fields": {
-                "device_id": {
-                    "description": "The Keba Charging Station to run the service on.",
-                    "name": "Charging Station"
-                },
-                "source": {
-                    "description": "Source for X2 output switching. 0 No phase toggle source is available, 1 Toggle via OCPP, 2 Direct toggle command via RESTAPI, 3 Toggle via Modbus, 4 Toggle via UDP.",
-                    "name": "Communication channel"
-                }
-            },
-            "name": "Set X2 source"
-        }
+      }
     }
+  },
+  "issues": {
+    "deprecated_yaml": {
+      "description": "Your existing YAML configuration has been imported into the UI automatically.\n\nRemove the keba YAML configuration from your configuration.yaml file and restart Home Assistant to fix this issue.\n\nDue to internal restructuring, you may need to update automations, scripts and your dashboard.",
+      "title": "YAML configuring of Keba is no longer used."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "rfid": "RFID tag for default authentication (Optional)",
+          "rfid_class": "RFID class for default authentication (color code, optional)"
+        }
+      }
+    }
+  },
+  "services": {
+    "set_charging_power": {
+      "description": "Set the charging power in kW if a charging operation is running. This service internally identifies the number of phases used for charging and sets the charging charging current to match the charging power as good as possible.",
+      "fields": {
+        "device_id": {
+          "description": "The Keba Charging Station to run the service on.",
+          "name": "Charging Station"
+        },
+        "power": {
+          "description": "Target charging power in kW.",
+          "name": "Charging Power"
+        },
+        "round_up": {
+          "description": "The charging station only supports to set current on all three phases. When round_up is enabled, the charging current will round up so that at least the given charging power is reached. Otherwise it is rounded down, so that less than the given charging power is reached.",
+          "name": "Round up charging power"
+        },
+        "stop_below_6_ampere": {
+          "description": "If enabled, the charging process will stop if given charging power is too small. Otherwise, charging will continue with 6 A per phase.",
+          "name": "Stop charging below 6A"
+        }
+      },
+      "name": "Set charging power"
+    },
+    "set_current": {
+      "description": "Sets the maximum current for charging processes.",
+      "fields": {
+        "current": {
+          "description": "The maximum current used for the charging process. The value is limited by the DIP-switch settings and the used cable of the charging station.",
+          "name": "Current Limit"
+        },
+        "delay": {
+          "description": "The delay in seconds after which the defined current should be set.",
+          "name": "Delay"
+        },
+        "device_id": {
+          "description": "The Keba Charging Station to run the service on.",
+          "name": "Charging Station"
+        }
+      },
+      "name": "Set current limit"
+    },
+    "set_energy": {
+      "description": "Sets the energy target after which the charging process stops.",
+      "fields": {
+        "device_id": {
+          "description": "The Keba Charging Station to run the service on.",
+          "name": "Charging Station"
+        },
+        "energy": {
+          "description": "The energy target to stop charging in kWh. Setting 0 disables the limit.",
+          "name": "Energy Limit"
+        }
+      },
+      "name": "Set energy limit"
+    },
+    "set_failsafe": {
+      "description": "Set the failsafe mode of the charging station. If all parameters are 0, the failsafe mode will be disabled.",
+      "fields": {
+        "device_id": {
+          "description": "The Keba Charging Station to run the service on.",
+          "name": "Charging Station"
+        },
+        "fallback_value": {
+          "description": "Fallback current to be set after timeout.",
+          "name": "Fallback value"
+        },
+        "mode": {
+          "description": "Failsafe on or off.",
+          "name": "Failsafe mode"
+        },
+        "persist": {
+          "description": "If failsafe_persist is False, the failsafe option is only used until charging station reboot. If failsafe_persist is True, the failsafe option will survive a reboot.",
+          "name": "Persist"
+        },
+        "timeout": {
+          "description": "Timeout after which the failsafe mode is triggered, if set_current was not executed during this time.",
+          "name": "Timeout"
+        }
+      },
+      "name": "Set failsafe"
+    },
+    "set_output": {
+      "description": "Output opens and closes the relay terminal X2. X2 is located in the connection panel of the charging station. The reply TCH-OK confirms only the receiving of the command and not the correctness of the value. Values between 2 and 9 are not being replied to (reserved functions). Invalid values (e.g. letters) are leading to a deactivation of the relay. The correct reception can be verified in the Output sensor. This command needs DSW1.2 to be set to OFF.",
+      "fields": {
+        "device_id": {
+          "description": "The Keba Charging Station to run the service on.",
+          "name": "Charging Station"
+        },
+        "out": {
+          "description": "0 is open, 1 is close, 2-9 not allowed (reserved functions), >= 10 Pulse output with the specified number of pulses (pulses / kWh) and is stored in the EEPROM; reasonably usable up to 150.",
+          "name": "Output value on X2"
+        }
+      },
+      "name": "Set output"
+    },
+    "start": {
+      "description": "Authorizes a charging process with the given RFID tag.",
+      "fields": {
+        "device_id": {
+          "description": "The Keba Charging Station to run the service on.",
+          "name": "Charging Station"
+        },
+        "rfid": {
+          "description": "The RFID tag to authorize the charging process (must be configured in the charging station first).",
+          "name": "RFID Tag"
+        },
+        "rfid_class": {
+          "description": "RFID class to be used (RFID color code)",
+          "name": "RFID Class"
+        }
+      },
+      "name": "Authorize charging process"
+    },
+    "stop": {
+      "description": "Deauthorizes the running charging process with the given RFID tag.",
+      "fields": {
+        "device_id": {
+          "description": "The Keba Charging Station to run the service on.",
+          "name": "Charging Station"
+        },
+        "rfid": {
+          "description": "The RFID tag to authorize the charging process (must be configured in the charging station first).",
+          "name": "RFID Tag"
+        }
+      },
+      "name": "Deauthorize charging process"
+    },
+    "x2": {
+      "description": "Sets th external phase switch via contact x2. When switching between the parameters, a cool down time of 5 minutes is required.",
+      "fields": {
+        "device_id": {
+          "description": "The Keba Charging Station to run the service on.",
+          "name": "Charging Station"
+        },
+        "three_phases": {
+          "description": "True for using all three phases, False for using only one phase.",
+          "name": "Three phases"
+        }
+      },
+      "name": "X2 Phase switch"
+    },
+    "x2src": {
+      "description": "Sets the X2 swtich source which specifies the communication channel used for toggle the contact x2",
+      "fields": {
+        "device_id": {
+          "description": "The Keba Charging Station to run the service on.",
+          "name": "Charging Station"
+        },
+        "source": {
+          "description": "Source for X2 output switching. 0 No phase toggle source is available, 1 Toggle via OCPP, 2 Direct toggle command via RESTAPI, 3 Toggle via Modbus, 4 Toggle via UDP.",
+          "name": "Communication channel"
+        }
+      },
+      "name": "Set X2 source"
+    }
+  }
 }
