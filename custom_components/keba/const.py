@@ -1,4 +1,4 @@
-"""Constants for the Abfallplus integration."""
+"""Constants for the Keba integration."""
 
 DOMAIN = "keba"
 CHARGING_STATIONS = "wallboxes"
