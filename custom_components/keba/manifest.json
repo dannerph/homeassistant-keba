@@ -8,5 +8,5 @@
   "iot_class": "local_polling",
   "loggers": ["keba_kecontact"],
   "requirements": ["keba-kecontact==4.3.0"],
-  "version": "4.3.0"
+  "version": "4.3.1"
 }
