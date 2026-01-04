@@ -48,7 +48,9 @@ class KebaNumber(KebaBaseEntity, NumberEntity):
 
     async def async_update(self) -> None:
         """Update the number with latest cached states from the device."""
-        self._attr_native_max_value = self._charging_station.get_value("Curr HW")
+        value = self._charging_station.get_value("Curr HW")
+        if value is not None:
+            self._attr_native_max_value = int(value)
         self._attr_native_value = self._charging_station.get_value(
             self.entity_description.key
         )
