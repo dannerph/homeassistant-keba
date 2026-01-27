@@ -4,7 +4,8 @@
       "user": {
         "data": {
           "description": "Verbinde dich mit deiner Ladestation, wenn die IP-Adresse nicht eingestellt ist, wird die automatische Erkennung verwendet",
-          "host": "Host (IP Adresse)"
+          "host": "Host (IP Adresse)",
+          "password": "Passwort (für P40/P40 Pro)"
         }
       }
     },
