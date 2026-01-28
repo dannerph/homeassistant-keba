@@ -16,8 +16,21 @@ from homeassistant.const import CONF_HOST, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, KEBA_CONNECTION
+from .const import (
+    CHARGING_STATIONS,
+    CONF_DEVICE_TYPE,
+    DEVICE_TYPE_P40,
+    DEVICE_TYPE_UDP,
+    DOMAIN,
+    KEBA_CONNECTION,
+)
 from .entity import KebaBaseEntity
+
+# Binary sensors that are only applicable to UDP-based devices (not P40)
+UDP_ONLY_BINARY_SENSORS = {
+    "FS_on",  # Failsafe mode - different implementation in P40
+    "Enable user",  # UDP-specific
+}
 
 SENSOR_TYPES = [
     # default
@@ -74,6 +87,15 @@ SENSOR_TYPES = [
     ),
 ]
 
+# P40-specific binary sensors
+P40_BINARY_SENSOR_TYPES = [
+    BinarySensorEntityDescription(
+        key="Session Active",
+        name="Session Active",
+        device_class=BinarySensorDeviceClass.RUNNING,
+    ),
+]
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -81,14 +103,25 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the keba charging station binary sensors from config entry."""
-    keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
-    entities: list[KebaBinarySensor] = []
+    device_type = config_entry.data.get(CONF_DEVICE_TYPE, DEVICE_TYPE_UDP)
 
-    charging_station = keba.get_charging_station(config_entry.data[CONF_HOST])
+    if device_type == DEVICE_TYPE_P40:
+        charging_station = hass.data[DOMAIN][CHARGING_STATIONS][config_entry.entry_id]
+        # For P40: use common sensors (excluding UDP-only) plus P40-specific sensors
+        sensor_types = [
+            desc for desc in SENSOR_TYPES if desc.key not in UDP_ONLY_BINARY_SENSORS
+        ] + P40_BINARY_SENSOR_TYPES
+    else:
+        keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
+        charging_station = keba.get_charging_station(config_entry.data[CONF_HOST])
+        # For UDP: use all common sensors
+        sensor_types = SENSOR_TYPES
+
+    entities: list[KebaBinarySensor] = []
     entities.extend(
         [
             KebaBinarySensor(charging_station, description)
-            for description in SENSOR_TYPES
+            for description in sensor_types
         ]
     )
     async_add_entities(entities, True)

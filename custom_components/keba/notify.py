@@ -9,7 +9,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import DOMAIN, KEBA_CONNECTION
+from .const import (
+    CONF_DEVICE_TYPE,
+    DEVICE_TYPE_P40,
+    DEVICE_TYPE_UDP,
+    DOMAIN,
+    KEBA_CONNECTION,
+)
 from .entity import KebaBaseEntity
 
 
@@ -19,6 +25,11 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the keba entity platform."""
+    device_type = config_entry.data.get(CONF_DEVICE_TYPE, DEVICE_TYPE_UDP)
+
+    # P40 devices don't have a display, so skip notify entity
+    if device_type == DEVICE_TYPE_P40:
+        return
 
     keba = hass.data[DOMAIN][KEBA_CONNECTION]
     charging_station = keba.get_charging_station(config_entry.data[CONF_HOST])
