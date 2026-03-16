@@ -3,13 +3,13 @@
     "set_charging_power": {
       "service": "mdi:flash"
     },
-        "set_current": {
+    "set_current": {
       "service": "mdi:flash"
     },
-        "set_energy": {
+    "set_energy": {
       "service": "mdi:flash"
     },
-        "set_failsafe": {
+    "set_failsafe": {
       "service": "mdi:message-alert"
     },
     "set_output": {
@@ -26,6 +26,6 @@
     },
     "x2src": {
       "service": "mdi:export"
-    },
+    }
   }
 }
