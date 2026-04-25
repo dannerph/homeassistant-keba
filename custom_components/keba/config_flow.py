@@ -46,8 +46,10 @@ async def detect_device_type(host: str) -> str:
     """Detect if the device is P40 (REST API) or older (UDP)."""
     _LOGGER.debug("Attempting to detect device type for host: %s", host)
 
-    # Try to connect to P40 REST API endpoint
-    # Note: /serialnumber returns plain text, not JSON
+    # Try to connect to P40 REST API endpoint.
+    # Note: /serialnumber returns plain text, not JSON.
+    # Firmware 2.4.0 (PKG-1.4.0) may return HTTP 500 from /serialnumber, so we
+    # also probe /version as a fallback to detect the P40 REST API.
     try:
         async with aiohttp.ClientSession() as session:
             async with asyncio.timeout(3):
@@ -67,7 +69,21 @@ async def detect_device_type(host: str) -> str:
                         _LOGGER.info("Detected P40 device at %s (auth required)", host)
                         return DEVICE_TYPE_P40
                     else:
-                        _LOGGER.debug("Unexpected status %s, assuming UDP device", response.status)
+                        _LOGGER.debug(
+                            "/serialnumber returned status %s, probing /version as fallback",
+                            response.status,
+                        )
+
+            async with asyncio.timeout(3):
+                async with session.get(
+                    f"https://{host}:8443/version",
+                    ssl=False,
+                ) as response:
+                    _LOGGER.debug("P40 /version response status: %s", response.status)
+                    if response.status in (200, 401):
+                        _LOGGER.info("Detected P40 device at %s via /version", host)
+                        return DEVICE_TYPE_P40
+                    _LOGGER.debug("Unexpected status %s, assuming UDP device", response.status)
     except asyncio.TimeoutError as err:
         _LOGGER.debug("P40 detection timeout for %s: %s", host, err)
     except aiohttp.ClientError as err:

@@ -265,22 +265,29 @@ class P40ApiClient:
     async def get_device_info(self) -> P40DeviceInfo | None:
         """Get device information."""
         # Get serial number - Note: /serialnumber returns plain text, not JSON
+        # In firmware 2.4.0 (PKG-1.4.0) this endpoint may return HTTP 500;
+        # in that case we fall back to the wallbox serial number from /v2/wallboxes.
         session = await self._ensure_session()
         url = f"{self._base_url}/serialnumber"
 
+        serial_number: str | None = None
         try:
             async with async_timeout.timeout(API_TIMEOUT):
                 async with session.get(url, ssl=False) as response:
                     if response.status == 200:
                         serial_number = (await response.text()).strip()
                     else:
-                        _LOGGER.error(
-                            "Request to /serialnumber failed with status %s", response.status
+                        _LOGGER.warning(
+                            "Request to /serialnumber failed with status %s, "
+                            "falling back to wallbox serial number",
+                            response.status,
                         )
-                        return None
         except (asyncio.TimeoutError, aiohttp.ClientError) as err:
-            _LOGGER.error("Error during request to /serialnumber: %s", err)
-            return None
+            _LOGGER.warning(
+                "Error during request to /serialnumber: %s, "
+                "falling back to wallbox serial number",
+                err,
+            )
 
         # Get version info - Note: /version returns a JSON string (e.g., "2.3.0-SNAPSHOT")
         version = ""
@@ -296,11 +303,25 @@ class P40ApiClient:
         except (asyncio.TimeoutError, aiohttp.ClientError) as err:
             _LOGGER.warning("Error during request to /version: %s", err)
 
-        # Get wallbox info to get model
-        wallboxes = await self._request("GET", "/v2/wallboxes")
+        # Get wallbox info to get model and (optionally) the serial number fallback
+        wallboxes_response = await self._request("GET", "/v2/wallboxes")
+        wallboxes: list = []
+        if isinstance(wallboxes_response, dict):
+            wallboxes = wallboxes_response.get("wallboxes", []) or []
+        elif isinstance(wallboxes_response, list):
+            wallboxes = wallboxes_response
+
         model = ""
-        if wallboxes and isinstance(wallboxes, list) and len(wallboxes) > 0:
+        if wallboxes:
             model = wallboxes[0].get("model", "")
+            if not serial_number:
+                serial_number = wallboxes[0].get("serialNumber") or None
+
+        if not serial_number:
+            _LOGGER.error(
+                "Unable to determine device serial number from /serialnumber or /v2/wallboxes"
+            )
+            return None
 
         return P40DeviceInfo(
             device_id=serial_number,
