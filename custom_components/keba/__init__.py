@@ -8,7 +8,7 @@ from keba_kecontact.connection import KebaKeContact, SetupError
 import voluptuous as vol
 
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.const import CONF_DEVICE_ID, CONF_HOST, Platform
+from homeassistant.const import CONF_DEVICE_ID, CONF_HOST, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
@@ -18,12 +18,17 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import (
     CHARGING_STATIONS,
+    CONF_DEVICE_TYPE,
     CONF_RFID,
     CONF_RFID_CLASS,
     DATA_HASS_CONFIG,
+    DEVICE_TYPE_P40,
+    DEVICE_TYPE_UDP,
     DOMAIN,
     KEBA_CONNECTION,
 )
+from .p40_api import P40ApiClient
+from .p40_charging_station import P40ChargingStation
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -100,11 +105,66 @@ def _get_charging_station(
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up KEBA charging station from a config entry."""
-    keba = await get_keba_connection(hass)
-    try:
-        charging_station = await keba.setup_charging_station(entry.data[CONF_HOST])
-    except SetupError as exc:
-        raise ConfigEntryNotReady(f"{entry.data[CONF_HOST]} not reachable") from exc
+    device_type = entry.data.get(CONF_DEVICE_TYPE, DEVICE_TYPE_UDP)
+    host = entry.data[CONF_HOST]
+
+    # Ensure CHARGING_STATIONS dictionary exists
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault(CHARGING_STATIONS, {})
+
+    if device_type == DEVICE_TYPE_P40:
+        # Set up P40/P40 Pro charging station
+        password = entry.data.get(CONF_PASSWORD, "")
+        _LOGGER.debug("Setting up P40 device at %s", host)
+
+        api_client = P40ApiClient(host)
+        try:
+            _LOGGER.debug("Attempting login to P40 at %s", host)
+            if not await api_client.login(password=password):
+                _LOGGER.error("Failed to authenticate with P40 at %s", host)
+                raise ConfigEntryNotReady(f"Failed to authenticate with P40 at {host}")
+
+            _LOGGER.debug("Login successful, getting device info")
+            # Get device info to find serial number
+            device_info = await api_client.get_device_info()
+            if not device_info:
+                _LOGGER.error("Failed to get device info from P40 at %s", host)
+                raise ConfigEntryNotReady(f"Failed to get device info from P40 at {host}")
+
+            _LOGGER.debug("Device info retrieved: %s", device_info)
+
+            _LOGGER.debug("Getting wallbox information")
+            # Get wallbox to find serial number
+            wallbox = await api_client.get_wallbox()
+            if not wallbox:
+                _LOGGER.error("No wallbox found on P40 at %s", host)
+                raise ConfigEntryNotReady(f"No wallbox found on P40 at {host}")
+
+            _LOGGER.debug("Wallbox retrieved: %s", wallbox)
+            serial_number = wallbox.get("serialNumber", device_info.device_id)
+            _LOGGER.debug("Using serial number: %s", serial_number)
+
+            # Create P40 charging station wrapper
+            _LOGGER.debug("Creating P40ChargingStation wrapper")
+            charging_station = P40ChargingStation(api_client, serial_number)
+
+            _LOGGER.debug("Initializing P40ChargingStation")
+            await charging_station.initialize()
+
+            _LOGGER.info("P40 charging station setup successful for %s", host)
+
+        except Exception as exc:
+            _LOGGER.error("Exception during P40 setup for %s: %s (type: %s)",
+                         host, str(exc), type(exc).__name__, exc_info=True)
+            await api_client.close()
+            raise ConfigEntryNotReady(f"{host} not reachable") from exc
+    else:
+        # Set up UDP-based charging station (legacy)
+        keba = await get_keba_connection(hass)
+        try:
+            charging_station = await keba.setup_charging_station(host)
+        except SetupError as exc:
+            raise ConfigEntryNotReady(f"{host} not reachable") from exc
 
     hass.data[DOMAIN][CHARGING_STATIONS][entry.entry_id] = charging_station
 
@@ -146,9 +206,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "Service is not available on this charging station"
             ) from ex
 
-    for service in charging_station.device_info.available_services():
-        if service != KebaService.DISPLAY:
-            hass.services.async_register(DOMAIN, service.value, execute_service)
+    # Register services (only for UDP-based devices that have available_services)
+    if device_type == DEVICE_TYPE_UDP and hasattr(charging_station.device_info, "available_services"):
+        for service in charging_station.device_info.available_services():
+            if service != KebaService.DISPLAY:
+                hass.services.async_register(DOMAIN, service.value, execute_service)
+    elif device_type == DEVICE_TYPE_P40:
+        # Register all services for P40
+        # Note: set_energy and set_charging_power will raise NotImplementedError
+        # as P40 API doesn't support these features
+        p40_services = [
+            "start",
+            "stop",
+            "set_current",
+            "set_failsafe",
+            "set_energy",
+            "set_charging_power",
+            "set_output",
+            "x2src",
+            "x2",
+        ]
+        for service_name in p40_services:
+            if not hass.services.has_service(DOMAIN, service_name):
+                hass.services.async_register(DOMAIN, service_name, execute_service)
 
     # Set up all platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -158,26 +238,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    keba = hass.data[DOMAIN][KEBA_CONNECTION]
+    device_type = entry.data.get(CONF_DEVICE_TYPE, DEVICE_TYPE_UDP)
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    # Remove notify
-    charging_station = keba.get_charging_station(entry.data[CONF_HOST])
-    # if KebaService.DISPLAY in charging_station.device_info.available_services():
-    #     hass.services.async_remove(
-    #         Platform.NOTIFY, f"{DOMAIN}_{slugify(charging_station.device_info.model)}"
-    #     )
+    # Get charging station
+    charging_station = hass.data[DOMAIN][CHARGING_STATIONS].get(entry.entry_id)
 
-    # Only remove services if it is the last charging station
-    if len(hass.data[DOMAIN][CHARGING_STATIONS]) == 1:
-        _LOGGER.debug("Removing last charging station, cleanup services")
+    if device_type == DEVICE_TYPE_P40:
+        # Clean up P40 charging station
+        if charging_station and isinstance(charging_station, P40ChargingStation):
+            await charging_station.close()
+            # Also close the API client
+            if hasattr(charging_station, "_api"):
+                await charging_station._api.close()
+    else:
+        # Clean up UDP-based charging station
+        keba = hass.data[DOMAIN][KEBA_CONNECTION]
 
-        for service in charging_station.device_info.available_services():
-            hass.services.async_remove(DOMAIN, service.value)
+        # Only remove services if it is the last charging station
+        if len(hass.data[DOMAIN][CHARGING_STATIONS]) == 1:
+            _LOGGER.debug("Removing last charging station, cleanup services")
+
+            if charging_station and hasattr(charging_station, "device_info"):
+                for service in charging_station.device_info.available_services():
+                    hass.services.async_remove(DOMAIN, service.value)
+
+        if unload_ok and charging_station:
+            keba.remove_charging_station(entry.data[CONF_HOST])
 
     if unload_ok:
-        keba.remove_charging_station(entry.data[CONF_HOST])
         hass.data[DOMAIN][CHARGING_STATIONS].pop(entry.entry_id)
 
     return unload_ok

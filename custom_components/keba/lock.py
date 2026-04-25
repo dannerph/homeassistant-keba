@@ -11,7 +11,16 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_RFID, CONF_RFID_CLASS, DOMAIN, KEBA_CONNECTION
+from .const import (
+    CHARGING_STATIONS,
+    CONF_DEVICE_TYPE,
+    CONF_RFID,
+    CONF_RFID_CLASS,
+    DEVICE_TYPE_P40,
+    DEVICE_TYPE_UDP,
+    DOMAIN,
+    KEBA_CONNECTION,
+)
 from .entity import KebaBaseEntity
 
 
@@ -21,10 +30,15 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the keba charging station locks from config entry."""
-    keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
-    entities: list[KebaLock] = []
+    device_type = entry.data.get(CONF_DEVICE_TYPE, DEVICE_TYPE_UDP)
 
-    charging_station = keba.get_charging_station(entry.data[CONF_HOST])
+    if device_type == DEVICE_TYPE_P40:
+        charging_station = hass.data[DOMAIN][CHARGING_STATIONS][entry.entry_id]
+    else:
+        keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
+        charging_station = keba.get_charging_station(entry.data[CONF_HOST])
+
+    entities: list[KebaLock] = []
     lock_description = LockEntityDescription(key="Authreq", name="Authentication")
 
     additional_args = {}

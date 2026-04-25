@@ -9,7 +9,14 @@ from homeassistant.const import CONF_HOST, UnitOfElectricCurrent
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, KEBA_CONNECTION
+from .const import (
+    CHARGING_STATIONS,
+    CONF_DEVICE_TYPE,
+    DEVICE_TYPE_P40,
+    DEVICE_TYPE_UDP,
+    DOMAIN,
+    KEBA_CONNECTION,
+)
 from .entity import KebaBaseEntity
 
 
@@ -19,10 +26,15 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Keba charging station number from config entry."""
-    keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
-    entities: list[KebaNumber] = []
+    device_type = config_entry.data.get(CONF_DEVICE_TYPE, DEVICE_TYPE_UDP)
 
-    charging_station = keba.get_charging_station(config_entry.data[CONF_HOST])
+    if device_type == DEVICE_TYPE_P40:
+        charging_station = hass.data[DOMAIN][CHARGING_STATIONS][config_entry.entry_id]
+    else:
+        keba: KebaKeContact = hass.data[DOMAIN][KEBA_CONNECTION]
+        charging_station = keba.get_charging_station(config_entry.data[CONF_HOST])
+
+    entities: list[KebaNumber] = []
     number_description = NumberEntityDescription(
         key="Curr user",
         name="Charging current",
