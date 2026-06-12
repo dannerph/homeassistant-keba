@@ -66,12 +66,6 @@ SENSOR_TYPES = [
         entity_registry_enabled_default=False,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
-    BinarySensorEntityDescription(
-        key="X2 phaseSwitch",
-        name="X2 Phase Switch",
-        entity_registry_enabled_default=False,
-        entity_category=EntityCategory.DIAGNOSTIC,
-    ),
 ]
 
 
