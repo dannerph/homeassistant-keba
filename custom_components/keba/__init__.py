@@ -7,11 +7,18 @@ from keba_kecontact.charging_station import ChargingStation, KebaService
 from keba_kecontact.connection import KebaKeContact, SetupError
 import voluptuous as vol
 
+from homeassistant.components import notify as hass_notify
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.const import CONF_DEVICE_ID, CONF_HOST, Platform
+from homeassistant.const import (
+    ATTR_CONFIG_ENTRY_ID,
+    CONF_DEVICE_ID,
+    CONF_HOST,
+    CONF_NAME,
+    Platform,
+)
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, discovery
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 from homeassistant.helpers.typing import ConfigType
@@ -31,7 +38,6 @@ PLATFORMS = [
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
     Platform.LOCK,
-    Platform.NOTIFY,
     Platform.NUMBER,
     Platform.SENSOR,
 ]
@@ -153,6 +159,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Set up all platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    if KebaService.DISPLAY in charging_station.device_info.available_services():
+        hass.async_create_task(
+            discovery.async_load_platform(
+                hass,
+                Platform.NOTIFY,
+                DOMAIN,
+                {
+                    CONF_NAME: entry.title,
+                    ATTR_CONFIG_ENTRY_ID: entry.entry_id,
+                },
+                hass.data[DOMAIN][DATA_HASS_CONFIG],
+            )
+        )
+
     return True
 
 
@@ -162,23 +182,25 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
-    # Remove notify
     charging_station = keba.get_charging_station(entry.data[CONF_HOST])
-    # if KebaService.DISPLAY in charging_station.device_info.available_services():
-    #     hass.services.async_remove(
-    #         Platform.NOTIFY, f"{DOMAIN}_{slugify(charging_station.device_info.model)}"
-    #     )
+    if charging_station is None:
+        return unload_ok
 
     # Only remove services if it is the last charging station
-    if len(hass.data[DOMAIN][CHARGING_STATIONS]) == 1:
-        _LOGGER.debug("Removing last charging station, cleanup services")
-
-        for service in charging_station.device_info.available_services():
-            hass.services.async_remove(DOMAIN, service.value)
+    last_charging_station = len(hass.data[DOMAIN][CHARGING_STATIONS]) == 1
 
     if unload_ok:
         keba.remove_charging_station(entry.data[CONF_HOST])
         hass.data[DOMAIN][CHARGING_STATIONS].pop(entry.entry_id)
+
+        if KebaService.DISPLAY in charging_station.device_info.available_services():
+            await hass_notify.async_reload(hass, DOMAIN)
+
+    if last_charging_station:
+        _LOGGER.debug("Removing last charging station, cleanup services")
+
+        for service in charging_station.device_info.available_services():
+            hass.services.async_remove(DOMAIN, service.value)
 
     return unload_ok
 
