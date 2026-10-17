@@ -34,6 +34,7 @@ PLATFORMS = [
     Platform.NOTIFY,
     Platform.NUMBER,
     Platform.SENSOR,
+    Platform.SELECT,
 ]
 CONFIG_SCHEMA = vol.Schema(
     {
