@@ -98,6 +98,16 @@
         }
       }
     },
+    "set_datetime": {
+      "name": "Datum und Uhrzeit synchronisieren",
+      "description": "Setzt Datum und Uhrzeit der Ladestation auf die aktuelle Systemzeit von Home Assistant.",
+      "fields": {
+        "device_id": {
+          "name": "Ladestation",
+          "description": "Die Keba Ladestation, deren Uhrzeit synchronisiert werden soll."
+        }
+      }
+    },
     "set_failsafe": {
       "name": "Failsafe Modus setzen",
       "description": "Set the failsafe mode of the Ladestation. If all parameters are 0, the failsafe mode will be disabled.",

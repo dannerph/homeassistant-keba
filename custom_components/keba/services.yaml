@@ -65,6 +65,14 @@ set_current:
           step: 1
           unit_of_measurement: seconds
 
+set_datetime:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: keba
+
 set_failsafe:
   fields:
     device_id:
