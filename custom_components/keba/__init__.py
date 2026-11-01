@@ -149,7 +149,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             charging_station = P40ChargingStation(api_client, serial_number)
 
             _LOGGER.debug("Initializing P40ChargingStation")
-            await charging_station.initialize()
+            await charging_station.initialize(device_info)
 
             _LOGGER.info("P40 charging station setup successful for %s", host)
 
