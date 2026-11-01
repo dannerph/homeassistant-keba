@@ -39,6 +39,15 @@ class KebaBaseEntity(Entity):
             configuration_url=cs_info.webconfigurl,
         )
 
+    @property
+    def available(self) -> bool:
+        """P40: unavailable while the last poll failed, instead of showing frozen values.
+
+        UDP stations have no coordinator and stay always available as before.
+        """
+        coordinator = getattr(self._charging_station, "coordinator", None)
+        return coordinator is None or coordinator.last_update_success
+
     def update_callback(self, *args) -> None:
         """Schedule a state update."""
         self.schedule_update_ha_state(True)
@@ -49,3 +58,7 @@ class KebaBaseEntity(Entity):
         Show latest data after startup.
         """
         self._charging_station.add_callback(self.update_callback)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Stop receiving updates."""
+        self._charging_station.remove_callback(self.update_callback)

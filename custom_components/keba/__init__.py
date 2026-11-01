@@ -146,7 +146,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             # Create P40 charging station wrapper
             _LOGGER.debug("Creating P40ChargingStation wrapper")
-            charging_station = P40ChargingStation(api_client, serial_number)
+            charging_station = P40ChargingStation(hass, entry, api_client, serial_number)
 
             _LOGGER.debug("Initializing P40ChargingStation")
             await charging_station.initialize(device_info)
@@ -214,7 +214,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     elif device_type == DEVICE_TYPE_P40:
         # Register all services for P40
         # Note: set_energy and set_charging_power will raise NotImplementedError
-        # as P40 API doesn't support these features
+        # as P40 API doesn't support these features. set_output is not registered:
+        # the P40's X2 output can only be configured, not switched.
         p40_services = [
             "start",
             "stop",
@@ -222,7 +223,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "set_failsafe",
             "set_energy",
             "set_charging_power",
-            "set_output",
             "x2src",
             "x2",
         ]

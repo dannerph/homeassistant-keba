@@ -107,3 +107,79 @@ async def test_close_logs_out_with_refresh_token():
         assert call.kwargs["json"] == {"refreshToken": "refresh"}
         assert call.kwargs["headers"]["Authorization"] == "Bearer old"
     assert client._access_token is None and client._refresh_token is None
+
+
+# --- coordinator (needs pytest-homeassistant-custom-component for the `hass` fixture) ---
+
+class FakeApi:
+    """Stand-in for P40ApiClient: scripted wallbox answers, counts calls."""
+
+    def __init__(self):
+        self.states = []  # popped per poll; None = wallbox failed
+        self.session_calls = 0
+        self.reboot_ok = True
+
+    async def get_wallbox_state(self, serial):
+        return self.states.pop(0)
+
+    async def get_load_management_config(self, key):
+        return {"data": 16000}
+
+    async def get_sessions(self, serial, limit=10, **kwargs):
+        self.session_calls += 1
+        return []
+
+    async def reboot(self):
+        return self.reboot_ok
+
+
+def _state(state="IDLE"):
+    return api.P40WallboxState(
+        number=1, serial_number="1", state=state, vehicle_plugged=False, authorization_enabled=False,
+        session_active=False, meter=None, max_phases=3, max_current=16000, phase_used="",
+        ip_address="", model="", firmware_version=None, error_code=None, alias=None,
+    )
+
+
+def _station(hass, fake):
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(domain="keba")
+    entry.add_to_hass(hass)
+    return station.P40ChargingStation(hass, entry, fake, "1")
+
+
+async def test_coordinator_backs_off_and_recovers(hass):
+    fake = FakeApi()
+    fake.states = [None, None, _state()]
+    cs = _station(hass, fake)
+    intervals = []
+    for _ in range(3):
+        await cs.coordinator.async_refresh()
+        intervals.append(cs.coordinator.update_interval.total_seconds())
+        if not cs.coordinator.last_update_success:
+            assert cs.get_value("State") is None  # entities show unavailable, not frozen data
+    assert intervals == [30, 60, station.POLL_INTERVAL]
+    assert cs.coordinator.last_update_success and cs.get_value("Raw State") == "IDLE"
+    await cs.close()
+
+
+async def test_sessions_only_fetched_when_state_changes(hass):
+    fake = FakeApi()
+    fake.states = [_state(), _state(), _state("CHARGING")]
+    cs = _station(hass, fake)
+    for _ in range(3):
+        await cs.coordinator.async_refresh()
+    assert fake.session_calls == 2  # first poll + state change, not the unchanged poll in between
+    await cs.close()
+
+
+async def test_restart_refused_raises(hass):
+    from homeassistant.exceptions import HomeAssistantError
+
+    fake = FakeApi()
+    fake.reboot_ok = False
+    cs = _station(hass, fake)
+    with pytest.raises(HomeAssistantError):
+        await cs.restart()
+    await cs.close()
