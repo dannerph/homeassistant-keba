@@ -97,6 +97,16 @@
         }
       }
     },
+    "set_datetime": {
+      "name": "Synchronize date and time",
+      "description": "Sets the charging station date and time to the current Home Assistant system time.",
+      "fields": {
+        "device_id": {
+          "name": "Charging Station",
+          "description": "The Keba Charging Station to synchronize."
+        }
+      }
+    },
     "set_failsafe": {
       "name": "Set failsafe",
       "description": "Set the failsafe mode of the charging station. If all parameters are 0, the failsafe mode will be disabled.",
