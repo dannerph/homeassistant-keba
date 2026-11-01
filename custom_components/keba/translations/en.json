@@ -11,7 +11,8 @@
     "step": {
       "user": {
         "data": {
-          "host": "Host (IP Address)"
+          "host": "Host (IP Address)",
+          "password": "Password (for P40/P40 Pro)"
         }
       }
     }
