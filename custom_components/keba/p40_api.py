@@ -527,6 +527,10 @@ class P40ApiClient:
         # For now, this is a placeholder
         pass
 
+    async def reboot(self) -> bool:
+        """Reboot the whole wallbox system (POST /v2/systems/reboot)."""
+        return await self._request("POST", "/v2/systems/reboot") is not None
+
     async def unlock_socket(self, serial_number: str) -> bool:
         """Unlock the charging socket (only for socket/plug versions, not cable versions).
 

@@ -8,7 +8,11 @@ from typing import Any
 from keba_kecontact.charging_station import ChargingStation
 from keba_kecontact.connection import KebaKeContact
 
-from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
+from homeassistant.components.button import (
+    ButtonDeviceClass,
+    ButtonEntity,
+    ButtonEntityDescription,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, EntityCategory
 from homeassistant.core import HomeAssistant
@@ -85,6 +89,13 @@ P40_BUTTON_TYPES: tuple[KebaButtonEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         remote_function=lambda charging_station: charging_station.request_data(),
     ),
+    KebaButtonEntityDescription(
+        key="restart",
+        name="Restart",
+        device_class=ButtonDeviceClass.RESTART,
+        entity_category=EntityCategory.CONFIG,
+        remote_function=lambda charging_station: charging_station.restart(),
+    ),
 )
 
 # Socket unlock button - only for socket versions
@@ -140,6 +151,11 @@ class KebaButton(KebaBaseEntity, ButtonEntity):
     ) -> None:
         """Initialize keba button."""
         super().__init__(charging_station, description)
+
+    @property
+    def available(self) -> bool:
+        """Buttons trigger actions: keep them pressable even while polling fails."""
+        return True
 
     async def async_press(self) -> None:
         """Process the button press."""

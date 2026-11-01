@@ -5,8 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .p40_api import P40ApiClient, P40DeviceInfo, P40SessionInfo
 
@@ -38,15 +43,29 @@ def split_sessions(
 class P40ChargingStation:
     """Wrapper for P40/P40 Pro charging station to match the interface of UDP-based stations."""
 
-    def __init__(self, api_client: P40ApiClient, serial_number: str) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        config_entry: ConfigEntry,
+        api_client: P40ApiClient,
+        serial_number: str,
+    ) -> None:
         """Initialize the P40 charging station."""
         self._api = api_client
         self._serial_number = serial_number
         self._device_info: P40DeviceInfo | None = None
         self._state_cache: dict[str, Any] = {}
-        self._callbacks: list = []
-        self._polling_task: asyncio.Task | None = None
+        self._listener_unsubs: dict = {}
+        self._force_refresh = False
         self._update_lock = asyncio.Lock()
+        self.coordinator = DataUpdateCoordinator(
+            hass,
+            _LOGGER,
+            config_entry=config_entry,
+            name=f"KEBA P40 {serial_number}",
+            update_method=self._async_update_data,
+            update_interval=timedelta(seconds=POLL_INTERVAL),
+        )
         self._current_session: P40SessionInfo | None = None
         self._last_completed_session: P40SessionInfo | None = None
         self._max_available_current: int | None = None  # in mA, from load management config
@@ -61,9 +80,28 @@ class P40ChargingStation:
     async def initialize(self, device_info: P40DeviceInfo | None = None) -> None:
         """Initialize the charging station."""
         self._device_info = device_info or await self._api.get_device_info()
-        await self._update_state(force=True)
-        # Start polling for updates
-        self._polling_task = asyncio.create_task(self._poll_updates())
+        self._force_refresh = True
+        # Raises ConfigEntryNotReady if the wallbox doesn't answer; the coordinator then polls.
+        await self.coordinator.async_config_entry_first_refresh()
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Coordinator update: poll the wallbox, back off while it fails."""
+        force, self._force_refresh = self._force_refresh, False
+        ok, reason = False, "no valid answer from the wallbox"
+        try:
+            ok = await self._update_state(force)
+        except Exception as err:  # noqa: BLE001 - any failure must still feed the backoff
+            reason = repr(err)
+        delay = next_poll_delay(self.coordinator.update_interval.total_seconds(), ok)
+        self.coordinator.update_interval = timedelta(seconds=delay)
+        if not ok:
+            raise UpdateFailed(f"{reason}; next try in {delay:.0f} s")
+        return self._state_cache
+
+    async def _refresh(self, force: bool = False) -> None:
+        """Refresh now (after our own actions), notifying entities via the coordinator."""
+        self._force_refresh |= force
+        await self.coordinator.async_refresh()
 
     async def _update_state(self, force: bool = False) -> bool:
         """Update the state cache from the API. Returns False if the wallbox didn't answer.
@@ -224,13 +262,6 @@ class P40ChargingStation:
         self._state_cache["Error Code"] = state.error_code
         # Firmware version (always set, even if None)
         self._state_cache["Firmware Version"] = state.firmware_version
-
-        # Notify callbacks
-        for callback in self._callbacks:
-            try:
-                callback()
-            except Exception as err:
-                _LOGGER.error("Error in callback: %s", err)
         return True
 
     def _map_state(self, p40_state: str) -> int:
@@ -263,38 +294,23 @@ class P40ChargingStation:
         }
         return state_details.get(p40_state, "unknown")
 
-    async def _poll_updates(self) -> None:
-        """Poll for state updates, backing off while the wallbox fails."""
-        delay: float = POLL_INTERVAL
-        while True:
-            try:
-                await asyncio.sleep(delay)
-                ok = await self._update_state()
-            except asyncio.CancelledError:
-                break
-            except Exception as err:  # keep polling whatever happens
-                _LOGGER.error("Error polling updates: %s", err)
-                ok = False
-            if ok and delay != POLL_INTERVAL:
-                _LOGGER.info("P40 %s answers again", self._serial_number)
-            elif not ok and delay == POLL_INTERVAL:
-                _LOGGER.warning(
-                    "P40 %s not answering, backing off up to %s s", self._serial_number, MAX_BACKOFF
-                )
-            delay = next_poll_delay(delay, ok)
-
     def get_value(self, key: str) -> Any:
         """Get a cached value."""
         return self._state_cache.get(key)
 
     def add_callback(self, callback) -> None:
-        """Add a callback for state updates."""
-        self._callbacks.append(callback)
+        """Add a callback, called after every coordinator update (success or failure)."""
+        self._listener_unsubs[callback] = self.coordinator.async_add_listener(callback)
 
     def remove_callback(self, callback) -> None:
         """Remove a callback."""
-        if callback in self._callbacks:
-            self._callbacks.remove(callback)
+        if unsub := self._listener_unsubs.pop(callback, None):
+            unsub()
+
+    async def restart(self) -> None:
+        """Reboot the wallbox. Note: when its REST API is already failing this is refused too."""
+        if not await self._api.reboot():
+            raise HomeAssistantError("The wallbox did not accept the restart request")
 
     async def start(self, rfid: str | None = None, rfid_class: str | None = None) -> None:
         """Start charging."""
@@ -302,35 +318,35 @@ class P40ChargingStation:
         token_id = rfid if rfid else None
         await self._api.start_charging(self._serial_number, token_id)
         # Update state immediately
-        await self._update_state(force=True)
+        await self._refresh(force=True)
 
     async def stop(self, rfid: str | None = None, rfid_class: str | None = None) -> None:
         """Stop charging."""
         await self._api.stop_charging(self._serial_number)
         # Update state immediately
-        await self._update_state(force=True)
+        await self._refresh(force=True)
 
     async def enable(self) -> None:
         """Enable charging (same as start without RFID)."""
         await self._api.start_charging(self._serial_number)
         # Update state immediately
-        await self._update_state(force=True)
+        await self._refresh(force=True)
 
     async def disable(self) -> None:
         """Disable charging (same as stop)."""
         await self._api.stop_charging(self._serial_number)
         # Update state immediately
-        await self._update_state(force=True)
+        await self._refresh(force=True)
 
     async def unlock_socket(self) -> None:
         """Unlock the charging socket."""
         await self._api.unlock_socket(self._serial_number)
         # Update state immediately
-        await self._update_state(force=True)
+        await self._refresh(force=True)
 
     async def request_data(self) -> None:
         """Request updated data from the charging station."""
-        await self._update_state(force=True)
+        await self._refresh(force=True)
 
     async def display(self, message: str) -> None:
         """Display a message on the charging station (not supported on P40)."""
@@ -342,7 +358,7 @@ class P40ChargingStation:
         current_ma = int(current * 1000)
         configs = [{"key": "max_available_current", "value": current_ma}]
         await self._api.set_load_management_config(configs)
-        await self._update_state(force=True)
+        await self._refresh(force=True)
 
     async def set_current(self, current: float, delay: int | None = None) -> None:
         """Set charging current limit."""
@@ -350,7 +366,7 @@ class P40ChargingStation:
         current_ma = int(current * 1000)
         configs = [{"key": "max_available_current", "value": current_ma}]
         await self._api.set_load_management_config(configs)
-        await self._update_state(force=True)
+        await self._refresh(force=True)
 
     async def set_failsafe(self, timeout: int, fallback_value: float) -> None:
         """Configure failsafe mode."""
@@ -358,7 +374,7 @@ class P40ChargingStation:
         fallback_ma = int(fallback_value * 1000)
         configs = [{"key": "failsafe_current_serial_1", "value": fallback_ma}]
         await self._api.set_load_management_config(configs)
-        await self._update_state(force=True)
+        await self._refresh(force=True)
 
     async def set_energy(self, energy: float) -> None:
         """Set energy limit - NOT SUPPORTED on P40."""
@@ -368,30 +384,27 @@ class P40ChargingStation:
         """Set charging power - NOT SUPPORTED on P40."""
         raise NotImplementedError("P40/P40 Pro does not support setting power limits via API (only current limits)")
 
-    async def set_output(self, value: int) -> None:
-        """Set output value on X2."""
-        configs = [{"key": "inst_x2_mode", "value": value}]
-        await self._api.set_installer_io_config(configs)
-        await self._update_state(force=True)
+    async def set_output(self, out: int) -> None:
+        """Set output - NOT SUPPORTED on P40.
+
+        The P40's X2 output can't be switched; it is only configured with a trigger mode
+        (NONE, PLUGGED_EV, CHARGING_EV, WELDED_CONTACTOR) via PUT /v2/configs/io.
+        """
+        raise NotImplementedError("P40/P40 Pro X2 output can only be configured, not switched")
 
     async def x2src(self, source: int) -> None:
         """Set X2 source."""
         configs = [{"key": "connector_phase_source", "value": source}]
         await self._api.set_load_management_config(configs)
-        await self._update_state(force=True)
+        await self._refresh(force=True)
 
     async def x2(self, three_phases: bool) -> None:
         """X2 Phase switch."""
         configs = [{"key": "connector_phase_enable", "value": three_phases}]
         await self._api.set_load_management_config(configs)
-        await self._update_state(force=True)
+        await self._refresh(force=True)
 
     async def close(self) -> None:
-        """Close the charging station connection."""
-        if self._polling_task:
-            self._polling_task.cancel()
-            try:
-                await self._polling_task
-            except asyncio.CancelledError:
-                pass
+        """Stop polling."""
+        await self.coordinator.async_shutdown()
 
