@@ -4,12 +4,35 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
 from .p40_api import P40ApiClient, P40DeviceInfo, P40SessionInfo
 
 _LOGGER = logging.getLogger(__name__)
+
+# The wallbox logs every REST request in full (restapi + CPM) on a small log partition; when that
+# partition fills up the data endpoints start returning 500 until a reboot. So: poll as slowly as
+# the official app (15 s), fetch sessions/lmgmt only when they can have changed, back off on errors.
+POLL_INTERVAL = 15  # seconds
+MAX_BACKOFF = 300  # seconds
+SLOW_REFRESH = 600  # seconds, safety refresh of sessions + load management config
+ACTIVE_SESSION_STATES = ("INITIATED", "PWM_CHARGING", "BLOCKED")
+
+
+def next_poll_delay(delay: float, ok: bool) -> float:
+    """Base interval after a successful poll, exponential backoff after a failed one."""
+    return POLL_INTERVAL if ok else min(delay * 2, MAX_BACKOFF)
+
+
+def split_sessions(
+    sessions: list[P40SessionInfo],
+) -> tuple[P40SessionInfo | None, P40SessionInfo | None]:
+    """Return (active session, most recent closed session) from a newest-first session list."""
+    active = next((s for s in sessions if s.status in ACTIVE_SESSION_STATES), None)
+    closed = next((s for s in sessions if s.end_date is not None and s.status == "CLOSED"), None)
+    return active, closed
 
 
 class P40ChargingStation:
@@ -23,52 +46,60 @@ class P40ChargingStation:
         self._state_cache: dict[str, Any] = {}
         self._callbacks: list = []
         self._polling_task: asyncio.Task | None = None
-        self._polling_interval = 5  # seconds
+        self._update_lock = asyncio.Lock()
         self._current_session: P40SessionInfo | None = None
         self._last_completed_session: P40SessionInfo | None = None
         self._max_available_current: int | None = None  # in mA, from load management config
+        self._last_state_key: tuple | None = None  # state when sessions were last fetched
+        self._next_slow_refresh = 0.0  # monotonic time of the next sessions + lmgmt refresh
 
     @property
     def device_info(self) -> P40DeviceInfo:
         """Return device information."""
         return self._device_info
 
-    async def initialize(self) -> None:
+    async def initialize(self, device_info: P40DeviceInfo | None = None) -> None:
         """Initialize the charging station."""
-        self._device_info = await self._api.get_device_info()
-        await self._update_state()
+        self._device_info = device_info or await self._api.get_device_info()
+        await self._update_state(force=True)
         # Start polling for updates
         self._polling_task = asyncio.create_task(self._poll_updates())
 
-    async def _update_state(self) -> None:
-        """Update the state cache from the API."""
+    async def _update_state(self, force: bool = False) -> bool:
+        """Update the state cache from the API. Returns False if the wallbox didn't answer.
+
+        force: also re-read sessions and load management config (after our own actions).
+        """
+        async with self._update_lock:
+            return await self._update_state_locked(force)
+
+    async def _update_state_locked(self, force: bool) -> bool:
         state = await self._api.get_wallbox_state(self._serial_number)
         if not state:
-            return
+            return False
 
-        # Get load management config for max_available_current
-        lmgmt_config = await self._api.get_load_management_config("max_available_current")
-        if lmgmt_config and "data" in lmgmt_config:
+        now = time.monotonic()
+        slow_due = force or now >= self._next_slow_refresh
+        if slow_due:
+            self._next_slow_refresh = now + SLOW_REFRESH
             # Store max_available_current in mA, will be converted to A when used
-            self._max_available_current = lmgmt_config["data"]
+            lmgmt_config = await self._api.get_load_management_config("max_available_current")
+            if lmgmt_config and "data" in lmgmt_config:
+                self._max_available_current = lmgmt_config["data"]
 
-        # Get current session data
-        self._current_session = await self._api.get_current_session(self._serial_number)
-        _LOGGER.debug("Current session for %s: %s", self._serial_number, self._current_session)
-
-        # Get last completed session for historical data (ended, reason)
-        # Need to fetch more than 1 session to find a completed one (the first might be active)
-        sessions = await self._api.get_sessions(self._serial_number, limit=5)
-        _LOGGER.debug("All sessions for %s: %s", self._serial_number, sessions)
-        if sessions:
-            # Get the most recent session that has an end date (completed session)
-            for session in sessions:
-                _LOGGER.debug("Checking session %s: status=%s, end_date=%s", session.id, session.status, session.end_date)
-                if session.end_date is not None and session.status == "CLOSED":
-                    self._last_completed_session = session
-                    _LOGGER.debug("Found last completed session: %s", session)
-                    break
-        _LOGGER.debug("Last completed session: %s", self._last_completed_session)
+        state_key = (state.state, state.session_active, state.vehicle_plugged)
+        if slow_due or state_key != self._last_state_key:
+            sessions = await self._api.get_sessions(self._serial_number, limit=5)
+            self._current_session, last_closed = split_sessions(sessions)
+            if last_closed:
+                self._last_completed_session = last_closed
+            # A just-started session may not be in the session list yet: retry on the next poll
+            if self._current_session or not state.session_active:
+                self._last_state_key = state_key
+            _LOGGER.debug(
+                "Sessions for %s: current=%s, last completed=%s",
+                self._serial_number, self._current_session, self._last_completed_session,
+            )
 
         # Map P40 state to the format expected by entities
         # This mapping ensures compatibility with existing entity code
@@ -155,9 +186,14 @@ class P40ChargingStation:
             self._state_cache["ended"] = None
         self._state_cache["reason"] = self._last_completed_session.termination_reason if self._last_completed_session else None
 
-        # Session energy - always use energyConsumed with conversion since energyConsumedInKwh can be 0.0
-        if self._current_session:
-            self._state_cache["E pres"] = self._current_session.energy_consumed / 1000000  # mWh to kWh
+        # Session energy in kWh. energyConsumed == live meter - session start meter (verified against
+        # the wallbox's own logs), so it stays current without polling the sessions endpoint.
+        if self._current_session and state.meter:
+            self._state_cache["E pres"] = (
+                state.meter.meter_value - self._current_session.starting_meter_value
+            ) / 1000000
+        elif self._current_session:
+            self._state_cache["E pres"] = self._current_session.energy_consumed / 1000000
         else:
             self._state_cache["E pres"] = 0
 
@@ -195,6 +231,7 @@ class P40ChargingStation:
                 callback()
             except Exception as err:
                 _LOGGER.error("Error in callback: %s", err)
+        return True
 
     def _map_state(self, p40_state: str) -> int:
         """Map P40 state to legacy state codes."""
@@ -227,15 +264,24 @@ class P40ChargingStation:
         return state_details.get(p40_state, "unknown")
 
     async def _poll_updates(self) -> None:
-        """Poll for state updates."""
+        """Poll for state updates, backing off while the wallbox fails."""
+        delay: float = POLL_INTERVAL
         while True:
             try:
-                await asyncio.sleep(self._polling_interval)
-                await self._update_state()
+                await asyncio.sleep(delay)
+                ok = await self._update_state()
             except asyncio.CancelledError:
                 break
-            except Exception as err:
+            except Exception as err:  # keep polling whatever happens
                 _LOGGER.error("Error polling updates: %s", err)
+                ok = False
+            if ok and delay != POLL_INTERVAL:
+                _LOGGER.info("P40 %s answers again", self._serial_number)
+            elif not ok and delay == POLL_INTERVAL:
+                _LOGGER.warning(
+                    "P40 %s not answering, backing off up to %s s", self._serial_number, MAX_BACKOFF
+                )
+            delay = next_poll_delay(delay, ok)
 
     def get_value(self, key: str) -> Any:
         """Get a cached value."""
@@ -256,35 +302,35 @@ class P40ChargingStation:
         token_id = rfid if rfid else None
         await self._api.start_charging(self._serial_number, token_id)
         # Update state immediately
-        await self._update_state()
+        await self._update_state(force=True)
 
     async def stop(self, rfid: str | None = None, rfid_class: str | None = None) -> None:
         """Stop charging."""
         await self._api.stop_charging(self._serial_number)
         # Update state immediately
-        await self._update_state()
+        await self._update_state(force=True)
 
     async def enable(self) -> None:
         """Enable charging (same as start without RFID)."""
         await self._api.start_charging(self._serial_number)
         # Update state immediately
-        await self._update_state()
+        await self._update_state(force=True)
 
     async def disable(self) -> None:
         """Disable charging (same as stop)."""
         await self._api.stop_charging(self._serial_number)
         # Update state immediately
-        await self._update_state()
+        await self._update_state(force=True)
 
     async def unlock_socket(self) -> None:
         """Unlock the charging socket."""
         await self._api.unlock_socket(self._serial_number)
         # Update state immediately
-        await self._update_state()
+        await self._update_state(force=True)
 
     async def request_data(self) -> None:
         """Request updated data from the charging station."""
-        await self._update_state()
+        await self._update_state(force=True)
 
     async def display(self, message: str) -> None:
         """Display a message on the charging station (not supported on P40)."""
@@ -296,7 +342,7 @@ class P40ChargingStation:
         current_ma = int(current * 1000)
         configs = [{"key": "max_available_current", "value": current_ma}]
         await self._api.set_load_management_config(configs)
-        await self._update_state()
+        await self._update_state(force=True)
 
     async def set_current(self, current: float, delay: int | None = None) -> None:
         """Set charging current limit."""
@@ -304,7 +350,7 @@ class P40ChargingStation:
         current_ma = int(current * 1000)
         configs = [{"key": "max_available_current", "value": current_ma}]
         await self._api.set_load_management_config(configs)
-        await self._update_state()
+        await self._update_state(force=True)
 
     async def set_failsafe(self, timeout: int, fallback_value: float) -> None:
         """Configure failsafe mode."""
@@ -312,7 +358,7 @@ class P40ChargingStation:
         fallback_ma = int(fallback_value * 1000)
         configs = [{"key": "failsafe_current_serial_1", "value": fallback_ma}]
         await self._api.set_load_management_config(configs)
-        await self._update_state()
+        await self._update_state(force=True)
 
     async def set_energy(self, energy: float) -> None:
         """Set energy limit - NOT SUPPORTED on P40."""
@@ -326,19 +372,19 @@ class P40ChargingStation:
         """Set output value on X2."""
         configs = [{"key": "inst_x2_mode", "value": value}]
         await self._api.set_installer_io_config(configs)
-        await self._update_state()
+        await self._update_state(force=True)
 
     async def x2src(self, source: int) -> None:
         """Set X2 source."""
         configs = [{"key": "connector_phase_source", "value": source}]
         await self._api.set_load_management_config(configs)
-        await self._update_state()
+        await self._update_state(force=True)
 
     async def x2(self, three_phases: bool) -> None:
         """X2 Phase switch."""
         configs = [{"key": "connector_phase_enable", "value": three_phases}]
         await self._api.set_load_management_config(configs)
-        await self._update_state()
+        await self._update_state(force=True)
 
     async def close(self) -> None:
         """Close the charging station connection."""

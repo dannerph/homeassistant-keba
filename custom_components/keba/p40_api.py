@@ -13,8 +13,9 @@ import async_timeout
 
 _LOGGER = logging.getLogger(__name__)
 
-# API timeout in seconds
-API_TIMEOUT = 10
+# API timeout in seconds. The wallbox's own CPM timeout is 60 s and the official app waits 120 s;
+# aborting early just makes the single-worker REST server do the work twice.
+API_TIMEOUT = 30
 
 
 @dataclass
@@ -108,7 +109,7 @@ class P40ApiClient:
         # Store credentials for re-authentication
         self._username: str | None = None
         self._password: str | None = None
-        self._is_refreshing: bool = False
+        self._refresh_lock = asyncio.Lock()
 
     async def _ensure_session(self) -> aiohttp.ClientSession:
         """Ensure we have an aiohttp session."""
@@ -117,7 +118,8 @@ class P40ApiClient:
         return self._session
 
     async def close(self) -> None:
-        """Close the API client."""
+        """Log out (revoke our tokens on the wallbox) and close the API client."""
+        await self.logout()
         if self._own_session and self._session:
             await self._session.close()
             self._session = None
@@ -155,49 +157,55 @@ class P40ApiClient:
             _LOGGER.error("Error during login: %s (type: %s)", err, type(err).__name__, exc_info=True)
             return False
 
-    async def _refresh_access_token(self) -> bool:
-        """Refresh the access token using the refresh token."""
+    async def logout(self) -> None:
+        """Revoke our access + refresh token on the wallbox, like the official app does."""
         if not self._refresh_token:
-            _LOGGER.warning("No refresh token available, attempting full re-login")
-            if self._username and self._password:
-                return await self.login(self._username, self._password)
-            return False
-
-        _LOGGER.info("Attempting to refresh access token")
-        session = await self._ensure_session()
-        url = f"{self._base_url}/v2/jwt/refresh"
-
+            return
         try:
-            async with async_timeout.timeout(API_TIMEOUT):
-                async with session.post(
-                    url,
-                    headers={"Authorization": f"Bearer {self._refresh_token}"},
-                    ssl=False,
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        self._access_token = data.get("accessToken")
-                        # Refresh token endpoint may also return a new refresh token
-                        new_refresh = data.get("refreshToken")
-                        if new_refresh:
-                            self._refresh_token = new_refresh
-                        _LOGGER.info("Token refresh successful")
-                        return True
-                    else:
-                        response_text = await response.text()
-                        _LOGGER.warning(
-                            "Token refresh failed with status %s: %s, attempting full re-login",
-                            response.status, response_text
-                        )
-                        # Refresh token might be expired, try full re-login
-                        if self._username and self._password:
-                            return await self.login(self._username, self._password)
-                        return False
-        except (asyncio.TimeoutError, aiohttp.ClientError) as err:
-            _LOGGER.error("Error during token refresh: %s", err)
-            # Try full re-login on error
-            if self._username and self._password:
-                return await self.login(self._username, self._password)
+            async with async_timeout.timeout(10):
+                await self._request("POST", "/v2/jwt/logout", {"refreshToken": self._refresh_token})
+        except asyncio.TimeoutError:
+            _LOGGER.debug("Logout from P40 at %s timed out", self._host)
+        self._access_token = self._refresh_token = None
+
+    async def _relogin(self) -> bool:
+        """Full login with the stored credentials (only when the refresh token is rejected)."""
+        if self._username is None:
+            return False
+        return await self.login(self._username, self._password or "")
+
+    async def _refresh_access_token(self, stale_token: str | None) -> bool:
+        """Get a new access token from the refresh token.
+
+        Mirrors the official app: one refresh at a time, keep the refresh token, and log in
+        again only when the refresh token itself is rejected. Anything else (nginx rate limit
+        503, timeouts, 5xx) is retried on the next poll instead of minting new tokens.
+        """
+        async with self._refresh_lock:
+            if self._access_token != stale_token:
+                return True  # another request refreshed while we waited
+            if not self._refresh_token:
+                return await self._relogin()
+            session = await self._ensure_session()
+            try:
+                async with async_timeout.timeout(API_TIMEOUT):
+                    async with session.post(
+                        f"{self._base_url}/v2/jwt/refresh",
+                        headers={"Authorization": f"Bearer {self._refresh_token}"},
+                        ssl=False,
+                    ) as response:
+                        status = response.status
+                        if status == 200:
+                            self._access_token = (await response.json()).get("accessToken")
+                            return bool(self._access_token)
+                        text = await response.text()
+            except (asyncio.TimeoutError, aiohttp.ClientError) as err:
+                _LOGGER.warning("Token refresh failed (%s), retrying on next poll", err)
+                return False
+            if status in (401, 422):
+                _LOGGER.info("Refresh token rejected (%s), logging in again", status)
+                return await self._relogin()
+            _LOGGER.warning("Token refresh returned %s, retrying on next poll: %s", status, text)
             return False
 
     async def _request(
@@ -223,7 +231,8 @@ class P40ApiClient:
         _LOGGER.debug("Access token present, making request to %s", path)
         session = await self._ensure_session()
         url = f"{self._base_url}{path}"
-        headers = {"Authorization": f"Bearer {self._access_token}"}
+        token = self._access_token
+        headers = {"Authorization": f"Bearer {token}"}
 
         try:
             async with async_timeout.timeout(API_TIMEOUT):
@@ -238,12 +247,10 @@ class P40ApiClient:
                         return response_data
                     elif response.status == 401 and _retry_on_401:
                         # Token expired, try to refresh
+                        # Normal: the access token lives 15 minutes.
                         response_text = await response.text()
-                        _LOGGER.warning(
-                            "Request to %s got 401 (token expired): %s. Attempting token refresh...",
-                            path, response_text
-                        )
-                        if await self._refresh_access_token():
+                        _LOGGER.debug("Request to %s got 401: %s. Refreshing token", path, response_text)
+                        if await self._refresh_access_token(token):
                             _LOGGER.info("Token refreshed successfully, retrying request to %s", path)
                             # Retry the request with the new token (but don't retry again on 401)
                             return await self._request(method, path, json_data, params, _retry_on_401=False)
@@ -504,24 +511,6 @@ class P40ApiClient:
             return []
 
         return [self._parse_session(session) for session in sessions_list]
-
-    async def get_current_session(self, serial_number: str) -> P40SessionInfo | None:
-        """Get current active charging session for a wallbox.
-
-        Args:
-            serial_number: Wallbox serial number
-
-        Returns:
-            P40SessionInfo if an active session exists, None otherwise
-        """
-        sessions = await self.get_sessions(serial_number, limit=5)
-        for session in sessions:
-            if (
-                session.wallbox_serial_number == serial_number
-                and session.status in ["INITIATED", "PWM_CHARGING", "BLOCKED"]
-            ):
-                return session
-        return None
 
     def add_callback(self, callback) -> None:
         """Add a callback for state updates."""
