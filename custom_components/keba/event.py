@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from keba_kecontact.charging_station import ChargingStation
@@ -39,6 +40,8 @@ class SessionSnapshot:
     ended: bool
     reason: int | None
     energy: float | None
+    started_at: datetime | None
+    ended_at: datetime | None
 
 
 def _rfid_value(value: Any) -> str | None:
@@ -49,6 +52,22 @@ def _rfid_value(value: Any) -> str | None:
     if text.strip("0") == "":
         return None
     return text
+
+
+def _timestamp(value: Any) -> datetime | None:
+    """Return a UTC datetime from epoch seconds, or None if the station reports 0."""
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError):
+        return None
+    if seconds <= 0:
+        return None
+    return datetime.fromtimestamp(seconds, UTC)
+
+
+def _isoformat(value: datetime | None) -> str | None:
+    """Return an ISO 8601 string with UTC offset, or None."""
+    return value.isoformat() if value is not None else None
 
 
 def session_snapshot(data: dict[str, Any]) -> SessionSnapshot | None:
@@ -64,6 +83,8 @@ def session_snapshot(data: dict[str, Any]) -> SessionSnapshot | None:
         ended=str(data.get("ended", "0")) != "0",
         reason=int(reason) if reason is not None else None,
         energy=data.get("E pres"),  # codespell:ignore pres
+        started_at=_timestamp(data.get("started[s]")),
+        ended_at=_timestamp(data.get("ended[s]")),
     )
 
 
@@ -89,6 +110,7 @@ def session_events(
                     "session_id": current.session_id,
                     "rfid_tag": current.rfid_tag,
                     "rfid_class": current.rfid_class,
+                    "started_at": _isoformat(current.started_at),
                 },
             )
         )
@@ -103,6 +125,8 @@ def session_events(
                     "rfid_class": current.rfid_class,
                     "reason": current.reason,
                     "energy": current.energy,
+                    "started_at": _isoformat(current.started_at),
+                    "ended_at": _isoformat(current.ended_at),
                 },
             )
         )
