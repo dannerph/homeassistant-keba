@@ -16,6 +16,20 @@
       "already_configured": "Charging station already configured."
     }
   },
+  "entity": {
+    "event": {
+      "session": {
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "started": "Started",
+              "ended": "Ended"
+            }
+          }
+        }
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {

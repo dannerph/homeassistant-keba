@@ -17,6 +17,20 @@
       "already_configured": "Ladestation bereits konfiguriert."
     }
   },
+  "entity": {
+    "event": {
+      "session": {
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "started": "Gestartet",
+              "ended": "Beendet"
+            }
+          }
+        }
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {
